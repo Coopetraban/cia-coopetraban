@@ -1,1 +1,1831 @@
-placeholder
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SARLAFT – Coopetraban</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script type="module">
+import { supabase } from '../supabase-client.js';
+import { requireAuth, logout } from '../auth-guard.js';
+
+// ── Verificar sesión ──────────────────────────────────────────────────────
+const perfil = await requireAuth(['usuario','admin'], '../index.html');
+
+// Mostrar usuario en header
+const userTag = document.getElementById('cia-user-tag');
+if (userTag) userTag.textContent = '👤 ' + perfil.nombre;
+
+// Botón cerrar sesión
+document.getElementById('cia-logout')
+  .addEventListener('click', () => logout('../index.html'));
+
+// ── Guardar resultado en Supabase (solo metadatos, sin datos sensibles) ───
+window.guardarResultadoCIA = async function({ total, alto, medio, bajo }) {
+  try {
+    const sem = alto > 5 ? 'rojo' : alto > 0 ? 'amarillo' : 'verde';
+    await supabase.from('resultados_cia').insert({
+      modulo:        'sarlaft',
+      ejecutado_por: perfil.email,
+      area:          perfil.area,
+      resumen: {
+        total_clientes: total,
+        alertas_alta:   alto,
+        alertas_media:  medio,
+        alertas_baja:   bajo,
+        semaforo:       sem,
+      },
+      estado: 'completado'
+    });
+    console.log('✅ Resultado guardado en CIA dashboard');
+  } catch(e) {
+    console.warn('⚠ CIA save error:', e.message);
+  }
+};
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+:root{
+  --vd:#00532F;--vm:#007D4A;--vc:#00A65B;--vh:#005f38;
+  --vbg:#F0F7F3;--vbr:#C8E6D5;
+  --oro:#C8A951;--oro2:#FEF9EC;
+  --ra:#C0392B;--rbg:#FDEDEC;
+  --na:#E67E22;--nbg:#FEF3E2;
+  --gt:#2C3E50;--gm:#6B7280;--gc:#F8F9FA;
+  --w:#FFFFFF;
+  --r:10px;--rs:6px;
+  --sh:0 2px 12px rgba(0,83,47,.10);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Source Sans 3",sans-serif;background:#EDF4EF;color:var(--gt);min-height:100vh}
+
+/* HEADER */
+header{background:var(--vd);position:sticky;top:0;z-index:100;box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.hi{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:12px 28px}
+.hb{display:flex;align-items:center;gap:14px}
+.hl{width:50px;height:50px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;border:2px solid var(--oro);flex-shrink:0}
+.hl img{width:36px;height:36px;object-fit:contain}
+.ht span:first-child{font-family:"Playfair Display",serif;font-size:1.2rem;font-weight:700;color:#fff;display:block}
+.ht span:last-child{font-size:.7rem;color:rgba(255,255,255,.6);letter-spacing:.08em;text-transform:uppercase}
+.hbadge{background:var(--oro);color:var(--vd);font-size:.68rem;font-weight:700;padding:5px 12px;border-radius:20px;letter-spacing:.1em;text-transform:uppercase}
+
+/* MAIN */
+main{max-width:1400px;margin:0 auto;padding:24px 20px 60px}
+.card{background:#fff;border:1px solid var(--vbr);border-radius:var(--r);padding:22px 26px;box-shadow:var(--sh);margin-bottom:20px}
+.sh{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.sh .ic{width:34px;height:34px;background:var(--vd);border-radius:var(--rs);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.95rem;flex-shrink:0}
+.sh h2{font-family:"Playfair Display",serif;font-size:1.1rem;font-weight:600;color:var(--vd)}
+.sh p{font-size:.76rem;color:var(--gm);margin-top:1px}
+
+/* UPLOAD */
+.uz{border:2.5px dashed var(--vm);border-radius:var(--r);padding:32px 24px;text-align:center;background:var(--vbg);cursor:pointer;transition:all .25s}
+.uz:hover,.uz.drag{background:#D9EFE6;border-color:var(--vd);box-shadow:var(--sh)}
+.uz .uic{font-size:2.2rem;margin-bottom:8px}
+.uz h3{font-family:"Playfair Display",serif;font-size:1rem;color:var(--vd);margin-bottom:5px}
+.uz p{font-size:.8rem;color:var(--gm)}
+.uz input{display:none}
+
+/* PROGRESS BAR */
+#loadWrap{display:none;background:#EBF5FB;border:1px solid #AED6F1;border-radius:var(--rs);padding:14px 18px;margin-top:12px}
+.lp-title{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.lp-spin{width:18px;height:18px;border:3px solid #AED6F1;border-top-color:#2471A3;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+.lp-phase{font-weight:600;color:#1A5276;font-size:.88rem}
+.lp-bar-bg{background:#D6EAF8;border-radius:20px;height:10px;overflow:hidden;margin-bottom:5px}
+.lp-bar{height:100%;width:0%;background:linear-gradient(90deg,#2471A3,#1A5276);border-radius:20px;transition:width .4s}
+.lp-detail{font-size:.72rem;color:#5D6D7E}
+
+/* STATUS OK */
+#statusOk{display:none;background:var(--vbg);border:1px solid var(--vbr);border-radius:var(--rs);padding:12px 16px;margin-top:12px}
+.sok-title{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--vd);font-size:.9rem;margin-bottom:6px}
+.sok-chips{display:flex;gap:14px;flex-wrap:wrap;font-size:.77rem;color:var(--gm)}
+.sok-chips b{color:var(--vd)}
+
+/* ANÁLISIS PROGRESS */
+#analisisWrap{display:none;background:var(--oro2);border:1px solid #E8D5A0;border-radius:var(--rs);padding:14px 18px;margin-top:12px}
+.ap-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.ap-label{font-weight:600;color:#7D5A00;font-size:.85rem;display:flex;align-items:center;gap:8px}
+.ap-pct{font-weight:700;color:var(--vd);font-size:.85rem}
+.ap-bar-bg{background:rgba(0,0,0,.1);border-radius:20px;height:8px;overflow:hidden;margin-bottom:5px}
+.ap-bar{height:100%;width:0%;background:var(--vd);border-radius:20px;transition:width .2s}
+.ap-counts{display:flex;gap:16px;font-size:.73rem}
+.ap-c-a{color:var(--ra);font-weight:600}
+.ap-c-m{color:var(--na);font-weight:600}
+.ap-c-b{color:var(--vc);font-weight:600}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* STATS */
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+.sc{background:#fff;border:1px solid var(--vbr);border-radius:var(--rs);padding:14px 16px;text-align:center;box-shadow:var(--sh)}
+.sc .sn{font-family:"Playfair Display",serif;font-size:1.75rem;font-weight:700;color:var(--vd);line-height:1}
+.sc .sl{font-size:.68rem;font-weight:600;color:var(--gm);text-transform:uppercase;letter-spacing:.07em;margin-top:4px}
+.sc.alto .sn{color:var(--ra)}
+.sc.medio .sn{color:var(--na)}
+.sc.bajo .sn{color:var(--vc)}
+
+/* FILTERS */
+.frow{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fg label{font-size:.7rem;font-weight:600;text-transform:uppercase;color:var(--gm);letter-spacing:.06em}
+.fg select,.fg input{padding:7px 11px;border:1.5px solid var(--vbr);border-radius:var(--rs);font-family:inherit;font-size:.85rem;color:var(--gt);background:#fff;outline:none;min-width:140px;transition:border-color .2s}
+.fg select:focus,.fg input:focus{border-color:var(--vm)}
+.btn{border:none;padding:8px 18px;border-radius:var(--rs);font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .2s;white-space:nowrap}
+.btn-p{background:var(--vd);color:#fff}.btn-p:hover{background:var(--vh)}
+.btn-s{background:transparent;color:var(--vd);border:1.5px solid var(--vm)}.btn-s:hover{background:var(--vbg)}
+.btn-g{background:var(--oro);color:var(--vd)}.btn-g:hover{background:#b8953a}
+.btn-r{background:var(--ra);color:#fff}.btn-r:hover{opacity:.9}
+.irow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;font-size:.78rem;color:var(--gm)}
+.irow strong{color:var(--gt)}
+
+/* BOARD — 3 columnas */
+.board{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.bcol{display:flex;flex-direction:column}
+.bhead{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:var(--rs) var(--rs) 0 0;color:#fff;font-weight:700;font-size:.83rem;letter-spacing:.04em}
+.bcnt{font-size:.75rem;font-weight:700;padding:2px 10px;border-radius:20px;background:rgba(255,255,255,.25)}
+.blist{border:1px solid;border-top:none;border-radius:0 0 var(--rs) var(--rs);flex:1;min-height:100px;max-height:72vh;overflow-y:auto;background:#fff}
+.bhead.alto{background:var(--ra)} .blist.alto{border-color:#F1948A}
+.bhead.medio{background:var(--na)} .blist.medio{border-color:#FAB87A}
+.bhead.bajo{background:var(--vc)} .blist.bajo{border-color:#82E0AA}
+.bexp{width:100%;margin-top:6px;padding:6px;font-size:.73rem}
+.bempty{padding:24px;text-align:center;color:#ccc;font-size:.82rem}
+
+/* TARJETA DE ASOCIADO */
+.card-aso{padding:12px 14px;border-bottom:1px solid #f0f0f0;cursor:pointer;transition:background .15s}
+.card-aso:hover{background:var(--vbg)}
+.card-aso:last-child{border-bottom:none}
+.ca-name{font-weight:700;font-size:.84rem;color:var(--gt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
+.ca-sub{font-size:.71rem;color:var(--gm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
+.ca-chips{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:6px}
+.ca-chip{background:#f5f5f5;padding:4px 7px;border-radius:4px;font-size:.7rem;overflow:hidden}
+.ca-chip .ck{color:#888;display:block;font-size:.65rem;white-space:nowrap}
+.ca-chip .cv{font-weight:600;color:var(--gt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.ca-rec{font-size:.7rem;color:var(--gm);padding:4px 8px;background:#fafafa;border-radius:4px;border-left:3px solid #ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ca-rec.alto{border-color:var(--ra)}
+.ca-rec.medio{border-color:var(--na)}
+.ca-rec.bajo{border-color:var(--vc)}
+.badge-al{background:var(--rbg);color:var(--ra);font-size:.67rem;font-weight:700;padding:2px 7px;border-radius:10px;white-space:nowrap;flex-shrink:0}
+.badge-ok{background:#E8F8F0;color:#1E8449;font-size:.67rem;font-weight:700;padding:2px 7px;border-radius:10px;white-space:nowrap;flex-shrink:0}
+.badge-est-a{color:#1E8449;font-size:.67rem}
+.badge-est-i{color:var(--ra);font-size:.67rem}
+
+/* TABLA */
+.tw{overflow-x:auto;border-radius:var(--rs);border:1px solid var(--vbr)}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+thead tr{background:var(--vd);color:#fff;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em}
+thead th{padding:10px 12px;text-align:left;font-weight:600;white-space:nowrap}
+tbody tr{border-bottom:1px solid var(--vbr);transition:background .15s}
+tbody tr:hover{background:var(--vbg)}
+tbody td{padding:9px 12px;vertical-align:middle}
+tbody tr:last-child{border-bottom:none}
+.tr{text-align:right}
+.nc{font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* BADGES */
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.b-a{background:var(--rbg);color:var(--ra);border:1px solid #F1948A}
+.b-m{background:#FEF3E2;color:#D35400;border:1px solid #FAB87A}
+.b-b{background:#E8F8F0;color:#1E8449;border:1px solid #82E0AA}
+.b-on{background:#E8F8F0;color:#1E8449}
+.b-off{background:#F4F4F4;color:#666}
+
+/* PANEL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,30,15,.5);z-index:200;backdrop-filter:blur(3px)}
+.overlay.open{display:flex;align-items:flex-start;justify-content:flex-end}
+.panel{width:min(680px,96vw);height:100vh;background:#fff;overflow-y:auto;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,.22);animation:slideIn .3s cubic-bezier(.16,1,.3,1)}
+@keyframes slideIn{from{transform:translateX(100%)}to{transform:none}}
+.ph{background:var(--vd);padding:20px 26px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.ph h3{font-family:"Playfair Display",serif;color:#fff;font-size:1.05rem}
+.ph p{color:rgba(255,255,255,.65);font-size:.76rem;margin-top:1px}
+.pclose{background:rgba(255,255,255,.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.pclose:hover{background:rgba(255,255,255,.3)}
+.pbody{padding:22px 26px;flex:1}
+.pfooter{padding:14px 26px;border-top:1px solid var(--vbr);background:var(--gc);display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0}
+
+/* PANEL BLOCKS */
+.ablock{margin-bottom:18px;padding:14px 16px;border-radius:var(--rs);border-left:4px solid var(--vm);background:var(--vbg)}
+.ablock.ra{border-color:var(--ra);background:var(--rbg)}
+.ablock.me{border-color:var(--na);background:#FEF3E2}
+.ablock.bj{border-color:var(--vc);background:#E8F8F0}
+.ablock h4{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--vd);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.ablock.ra h4{color:var(--ra)}
+.ablock.me h4{color:var(--na)}
+.ablock.bj h4{color:#1E8449}
+.ablock ul{list-style:none;display:flex;flex-direction:column;gap:5px}
+.ablock ul li{font-size:.84rem;color:var(--gt);padding-left:14px;position:relative;line-height:1.5}
+.ablock ul li::before{content:"▸";position:absolute;left:0;color:var(--vm);font-size:.68rem;top:3px}
+.ablock p{font-size:.84rem;color:var(--gt);line-height:1.6}
+.rlevel{font-family:"Playfair Display",serif;font-size:1.9rem;font-weight:700;line-height:1;margin-bottom:4px}
+.rlevel.ra{color:var(--ra)}
+.rlevel.me{color:var(--na)}
+.rlevel.bj{color:var(--vc)}
+.ntag{display:inline-block;background:var(--vd);color:rgba(255,255,255,.9);font-size:.63rem;font-weight:700;padding:2px 7px;border-radius:3px;letter-spacing:.06em;margin-right:4px;text-transform:uppercase}
+.ficha-comp{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:8px}
+.ficha-comp th{background:var(--vd);color:#fff;padding:5px 10px;text-align:right;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.ficha-comp th:first-child{text-align:left}
+.ficha-comp td{padding:5px 10px;border-bottom:1px solid var(--vbr)}
+.ficha-comp td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+.ficha-comp tr:last-child td{border:none;font-weight:700;background:var(--vbg)}
+hr.div{border:none;border-top:1px solid var(--vbr);margin:14px 0}
+
+/* PENDING NOTICE */
+#pendNotice{display:none;margin-top:10px;padding:10px 14px;background:var(--oro2);border-radius:var(--rs);font-size:.8rem;color:#7D5A00;border:1px solid #E8D5A0}
+
+/* DIAG */
+#colDiag{display:none;margin-top:8px;padding:10px 14px;background:#f8f8f0;border-radius:var(--rs);border:1px solid #e0e0b0;font-size:.76rem}
+
+@media(max-width:900px){
+  .board{grid-template-columns:1fr}
+  .hi{padding:10px 14px}
+  main{padding:14px 10px 50px}
+  .frow{flex-direction:column}
+  .fg select,.fg input{min-width:unset;width:100%}
+  .sgrid{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hi">
+    <div class="hb">
+      <div class="hl"><img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCACrAKwDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD4aoooroPy8KKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACvdfhF+xR8V/jLp0GqaVoI0zRJ1Dxalq0ogjlU90Xl2HuBg+terf8ABOn9mXTfi34k1Hxp4ltUvfD+hTrBb2kq5juLvAf5h3VFKnHcsK/VZEWJFRFCIowqqMAD0FQ5W2PocDlirw9rVej2R+MfxV/YP+Lfwo0abWLvRodb0qBS89xo83nNCo6s0ZAbHuAQO+K+eq/ohkjWVGR1DowIZWGQR6GvxH/bK8Aaf8M/2kvGehaVEsGnLPFdQxJ91BNCkpUDsAXI/CiMrkZjl8MNFVKb02PFqKKKs8EKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD9dv+CZs2nSfst2CWZQ3ceq3q3wXqJjJlc+/lGH8MV9WV+MP7Iv7Wuo/sza/exTWj6t4W1Nla8sUbDpIOBLGTxuxwQeox6V93H/AIKY/B1tOjmifXJryQYWxTTyZC56L97HJ4rFp3PtsFjaDoRjKSTWh9UajqFvpNhc3t3MsFrbxtLLK5wqKoyST9BX4ZftLfE6H4w/HLxb4sts/Yr26C2xPUwxosUZ/FUFfoB4+svjj+2RYDRbLSX+E/w3uCGuJtUYjUL9M5CtGOVTvt4zjkkcV3Hwe/4J5/Cn4YJHc6npzeNdXHJudbAeFD/sQD5AP97cfemrIjGUquPtCmrRXV9f1PyV8N+B/EXjF9mhaHqGrnOM2Vs8oz9QMV0HiD4D/EXwrpcmpav4K1qwsIxue4ms2CIPUnHAr929M0XT9Fto7fT7G2sbeMBUitoljVQOgAAGK5/4r+NvD/w8+H2t674ouYLbRre2fzfPwRKSCBGAfvMx4A75p85zf2NTjFuUz8CaKsajPFdahdTQQi3gkld44R0jUsSF/AYFV60PlnuFFFFAgooooAKKKKACiiigAooooAKKKKACjrV3Q9Ev/Eus2Wk6XaS32o3sqwW9tCu55HY4AAr9Sf2U/wDgnvoPwztbHxL4+ii1/wAWsqyrYSAPaWDdcAf8tHHdjxxwO5TdjuwuEqYqVobdWfH37Pn7BvxB+N6w6pe2z+EfDDMMahqUJWWde5hiOGYY6OcL6E1+j3wN/Y8+HHwH8m70jSRqOvoOdY1HEs4PqmeE/wCAjPvXtyIqKFUBVAwABgAUtZNtn2GGwFHDapXfdhSMwRSzEKoGSSeBS1+b/wC3/wDtnXc+rX3wx8D3rW9pb/u9Z1WB8NLJ3gjI6KP4j3PHY5SVzoxOIhhqbnM9z/aC/wCChvgP4Ry3WkeHXTxn4lhYxyRWUn+i27jgiSUZBIPBVckHg4r81vjf+0V43/aA1lbzxVqZltYXL2um274W2zj5V7nHG45NeZ9aK1UUj4rE4+tidG7LsgoooqjzgooooAKKKKACiiigAooooAKKKKACiiigD7+/wCCVPwy0jVdY8VeNryNLnVNNKWFkrjPkbxueQf7RGFz2GfU195fFH4weEvg34fk1jxZrNvpdsAfLjdgZZyP4Y06sfpX4f8Aw5+MPjX4R3N3P4O8S33h+S7UJcC0cbZQOm5WBBIycHGRnisjxZ401/x5q76p4j1m+1zUX4NzfztK+PQFjwPYcVDjdnv4fMo4bDqnCPvfgfuB8BPj34b/AGiPBtx4j8NLcxWtvePYzQ3iBJEkVVbkAngq6kH39q9Jr4m/4JRW7L8EPFk/O1/EboPqLW3J/wDQhX2zWb0Z9Phakq1GNSW7R4r+1/8AG5fgR8ENZ1uCRRrV3jT9MjJ5aeTI3Y9EUM5/3fevxLubiW8uJZ55GmmlYu8jnJZickk+ua+1f+CpfxIk1/4r6H4QhmzY6HZefLGDwbiU5JI9kVQPqfWviatIrQ+SzWu6tfkW0f6YUUUVZ4wUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFAH6v/wDBLO0Ft+zhqUo/5ePEd1Kfwgt0/wDZK+wycCvkH/glxdJcfs2XmanLQeILqNvYmKBv5MK+sNevhpmh6jeEZFvbSTY/3VJ/pWD3P0LBWWGh6H4d/tPeMZPHf7QHjvVncuh1Sa3jyc4SJvLGPb5c/jXl9WtVv21XVL29blrmd5zn1Zi39aq1sj4GpLnnKT6sKKKKZmFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQB+n3/BJ7VPN+EvjPTt3+o1wXAXP9+3jXP/kKvqf4/aw3h/4F/EPU1ba9p4ev5lPutu5H618If8EnvFaWvjLxv4dkkw13Zw3kSlupjcq2B64cflX2D+2nqg0j9lj4kTH/AJaaW1sPrK6xf+z1i9z7nB1L4FPsn+B+I6jAA9KWiitj4YKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA9V/Zi+M3/Ch/jLofiqZHl06Njb38cYyxt34cgdyPvY74r7T/bu/ay+H3j74Af8I94O8S22u32t3ULSRW24NDDGwkJkUgFSSqjBwfyr814KlK7ud9LGVKNGVFbMKKKKo4AooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD/2Q==" alt="Coopetraban"></div>
+      <div class="ht">
+        <span>Coopetraban</span>
+        <span>Sistema de Análisis SARLAFT / Riesgos LA/FT</span>
+      </div>
+    </div>
+    <div class="hbadge">🛡️ Oficial de Cumplimiento</div>
+  </div>
+</header>
+
+<main>
+
+<!-- CARGA -->
+<div class="card">
+  <div class="sh"><div class="ic">📂</div><div><h2>Carga de Archivo Excel</h2><p>Importe el archivo con las hojas: Transacciones (H1), Perfiles (H2) e Historial (H3)</p></div></div>
+  <div class="uz" id="dropZone" onclick="document.getElementById('fi').click()">
+    <div class="uic" id="uic">📊</div>
+    <h3 id="utitle">Haga clic o arrastre su archivo Excel aquí</h3>
+    <p id="usub">Formatos: .xlsx · .xls &nbsp;|&nbsp; Hojas: Transacciones, Asociados, Historial</p>
+    <input type="file" id="fi" accept=".xlsx,.xls">
+  </div>
+  <!-- BARRA CARGA -->
+  <div id="loadWrap">
+    <div class="lp-title">
+      <div class="lp-spin"></div>
+      <span class="lp-phase" id="lpPhase">Iniciando…</span>
+    </div>
+    <div class="lp-bar-bg"><div class="lp-bar" id="lpBar"></div></div>
+    <div class="lp-detail" id="lpDetail"></div>
+  </div>
+  <!-- STATUS OK -->
+  <div id="statusOk">
+    <div class="sok-title">✅ <span id="sokFile"></span></div>
+    <div class="sok-chips" id="sokChips"></div>
+  </div>
+  <!-- ANÁLISIS AUTOMÁTICO PROGRESS -->
+  <div id="analisisWrap">
+    <div class="ap-title">
+      <div class="ap-label"><div class="lp-spin"></div><span id="apPhase">Analizando asociados…</span></div>
+      <span class="ap-pct" id="apPct">0%</span>
+    </div>
+    <div class="ap-bar-bg"><div class="ap-bar" id="apBar"></div></div>
+    <div class="ap-counts">
+      <span class="ap-c-a">🔴 Alto: <span id="apAlto">0</span></span>
+      <span class="ap-c-m">🟠 Medio: <span id="apMedio">0</span></span>
+      <span class="ap-c-b">🟢 Bajo: <span id="apBajo">0</span></span>
+    </div>
+  </div>
+  <div id="colDiag"></div>
+</div>
+
+<!-- STATS -->
+<div id="statsSection" style="display:none">
+  <div class="sh"><div class="ic">📈</div><div><h2>Resumen Ejecutivo del Período</h2><p>Consolidado H1 (insumo principal) · H2 (perfiles) · H3 (historial 2025)</p></div></div>
+  <div class="sgrid" id="sgrid"></div>
+</div>
+
+<!-- PANEL CONTROL -->
+<div id="tableSection" style="display:none">
+  <div class="card">
+    <div class="sh"><div class="ic">🔍</div><div><h2>Panel de Control SARLAFT</h2><p>H1 = insumo principal · H2 = perfil de apoyo · H3 = historial 2025</p></div></div>
+    <div class="frow">
+      <div class="fg"><label>Buscar</label><input type="text" id="srch" placeholder="Nombre o identificación…" oninput="applyFilters()"></div>
+      <div class="fg"><label>Agencia</label><select id="fAg" onchange="applyFilters()"><option value="">Todas</option></select></div>
+      <div class="fg"><label>Estado</label><select id="fEst" onchange="applyFilters()"><option value="">Todos</option><option>Activo</option><option>Inactivo</option></select></div>
+      <div class="fg"><label>Categoría Especial</label>
+        <select id="fCat" onchange="applyFilters()">
+          <option value="">Todas</option>
+          <option value="PEP">🏛 PEP</option>
+          <option value="Familiar PEP">🏛 Familiar PEP</option>
+          <option value="Administra Recursos Públicos">🏦 Administra Recursos Públicos</option>
+          <option value="ESAL">✝ ESAL</option>
+          <option value="Inmobiliario">🏢 Inmobiliario</option>
+          <option value="Juegos de suerte y azar">🎰 Juegos de suerte y azar</option>
+          <option value="Minero">⛏ Minero</option>
+        </select>
+      </div>
+      <div class="fg"><label>Vista</label>
+        <select id="fVista" onchange="applyFilters()">
+          <option value="board">🗂️ Tablero por riesgo</option>
+          <option value="tabla">📋 Tabla completa</option>
+        </select>
+      </div>
+      <button class="btn btn-s" onclick="clearFilters()">↺ Limpiar</button>
+      <button class="btn btn-g" onclick="exportarExcel()" id="btnExp" style="display:none">⬇️ Exportar Excel completo</button>
+    </div>
+    <div class="irow" id="irow"></div>
+    <div id="pendNotice">⏳ Ejecutando análisis automático… Los asociados se clasificarán en breve.</div>
+
+    <!-- TABLERO -->
+    <div id="vBoard" class="board" style="display:none">
+      <div class="bcol">
+        <div class="bhead alto">🔴 RIESGO ALTO <span class="bcnt" id="cntA">0</span></div>
+        <div class="blist alto" id="colA"><div class="bempty">Sin asociados en esta categoría</div></div>
+        <button class="btn btn-s bexp" onclick="exportarCol('Alto')">⬇️ Exportar Altos</button>
+      </div>
+      <div class="bcol">
+        <div class="bhead medio">🟠 RIESGO MEDIO <span class="bcnt" id="cntM">0</span></div>
+        <div class="blist medio" id="colM"><div class="bempty">Sin asociados en esta categoría</div></div>
+        <button class="btn btn-s bexp" onclick="exportarCol('Medio')">⬇️ Exportar Medios</button>
+      </div>
+      <div class="bcol">
+        <div class="bhead bajo">🟢 RIESGO BAJO <span class="bcnt" id="cntB">0</span></div>
+        <div class="blist bajo" id="colB"><div class="bempty">Sin asociados en esta categoría</div></div>
+        <button class="btn btn-s bexp" onclick="exportarCol('Bajo')">⬇️ Exportar Bajos</button>
+      </div>
+    </div>
+
+    <!-- TABLA -->
+    <div id="vTabla" style="display:none">
+      <div class="tw">
+        <table>
+          <thead><tr>
+            <th>Identificación</th><th>Nombre</th><th>Agencia</th><th>Estado</th>
+            <th>Actividad</th><th class="tr">Ef. Período</th><th class="tr">N°Tx</th>
+            <th>Riesgo</th><th>Alertas</th><th></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div id="tinfo" style="font-size:.78rem;color:var(--gm);margin-top:8px;display:flex;align-items:center;gap:10px"></div>
+    </div>
+
+    <div id="tempty" class="bempty" style="display:none;border:1px solid var(--vbr);border-radius:var(--rs);margin-top:8px">
+      <div style="font-size:2rem;margin-bottom:8px">🔍</div>
+      <strong>Sin resultados</strong><br><span style="font-size:.8rem">Ajuste los filtros</span>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<!-- PANEL DETALLE -->
+<div class="overlay" id="overlay" onclick="closePanelClick(event)">
+  <div class="panel">
+    <div class="ph">
+      <div><h3 id="panTitle">Análisis SARLAFT</h3><p id="panSub">Evaluación de riesgo LA/FT</p></div>
+      <button class="pclose" onclick="closePanel()">✕</button>
+    </div>
+    <div class="pbody" id="panBody">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:14px">
+        <div class="lp-spin" style="width:36px;height:36px;border-width:4px"></div>
+        <p style="font-size:.84rem;color:var(--gm);text-align:center">Procesando análisis SARLAFT…<br>Aplicando motor de reglas normativas</p>
+      </div>
+    </div>
+    <div class="pfooter" id="panFoot" style="display:none">
+      <button class="btn btn-p" onclick="exportAna()">⬇️ Exportar Análisis</button>
+      <button class="btn btn-s" onclick="closePanel()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════ ESTADO GLOBAL ══════════
+let allData = {tx:[],asociados:[],historial:[]};
+let filteredData = [];
+let riskCache  = {};
+let analysisCache = {};
+let histIndex  = null;
+let curAnalysis = null;
+
+// ══════════ HELPERS ══════════
+function fmtFull(n){
+  n = Number(n)||0;
+  return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n);
+}
+function fmt(n){
+  n=Number(n)||0;
+  if(n>=1e12) return '$'+(n/1e12).toFixed(1)+'B';
+  if(n>=1e9)  return '$'+(n/1e9).toFixed(1)+'MM';
+  if(n>=1e6)  return '$'+(n/1e6).toFixed(1)+'M';
+  if(n>=1e3)  return '$'+(n/1e3).toFixed(0)+'K';
+  return '$'+n.toFixed(0);
+}
+function normKey(s){
+  return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+}
+function getCol(obj,...cands){
+  const keys=Object.keys(obj);
+  for(const c of cands){
+    const nc=normKey(c);
+    const words=nc.split(' ').filter(w=>w.length>2);
+    const f=keys.find(k=>normKey(k)===nc);
+    if(f!=null && obj[f]!=null) return obj[f];
+    if(words.length>0){
+      const p=keys.find(k=>words.every(w=>normKey(k).includes(w)));
+      if(p!=null && obj[p]!=null) return obj[p];
+    }
+  }
+  return '';
+}
+
+// ══════════ CARGA DE ARCHIVO ══════════
+const dz = document.getElementById('dropZone');
+const fi = document.getElementById('fi');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');if(e.dataTransfer.files[0]) startLoad(e.dataTransfer.files[0])});
+fi.addEventListener('change',e=>{if(e.target.files[0]) startLoad(e.target.files[0])});
+
+function setLp(pct,fase,det){
+  document.getElementById('lpBar').style.width=pct+'%';
+  document.getElementById('lpPhase').textContent=fase;
+  document.getElementById('lpDetail').textContent=det||'';
+}
+
+function startLoad(file){
+  // UI: mostrar estado de carga
+  document.getElementById('uic').textContent='⏳';
+  document.getElementById('utitle').textContent='Cargando: '+file.name;
+  document.getElementById('usub').textContent='Por favor espere…';
+  dz.style.background='#EBF5FB';dz.style.borderColor='#AED6F1';dz.style.cursor='default';
+  dz.onclick=null;
+
+  document.getElementById('loadWrap').style.display='block';
+  document.getElementById('statusOk').style.display='none';
+  document.getElementById('analisisWrap').style.display='none';
+  setLp(5,'Leyendo archivo…','Iniciando lectura del Excel');
+
+  const reader=new FileReader();
+  reader.onprogress=e=>{
+    if(e.lengthComputable) setLp(5+Math.round(e.loaded/e.total*30),'Leyendo archivo…',(e.loaded/1024/1024).toFixed(1)+' MB de '+(e.total/1024/1024).toFixed(1)+' MB');
+  };
+  reader.onload=e=>{
+    setTimeout(()=>{
+      try{
+        setLp(38,'Parseando hojas del Excel…','Detectando estructura…');
+        const wb=XLSX.read(e.target.result,{type:'array'});
+        const sh=wb.SheetNames;
+        const fs=kws=>sh.find(s=>kws.some(k=>s.toLowerCase().includes(k.toLowerCase())));
+        const s1=fs(['transacci','hoja1','hoja 1','sheet1'])||sh[0];
+        const s2=fs(['asociado','datos','hoja2','hoja 2','sheet2'])||sh[1];
+        const s3=fs(['historial','hoja3','hoja 3','sheet3'])||sh[2];
+        setLp(50,'Cargando Hoja 1 — Transacciones…','');
+        allData.tx=XLSX.utils.sheet_to_json(wb.Sheets[s1]||wb.Sheets[sh[0]],{defval:''});
+        setLp(65,'Cargando Hoja 2 — Perfiles…',allData.tx.length.toLocaleString('es-CO')+' registros H1');
+        allData.asociados=XLSX.utils.sheet_to_json(wb.Sheets[s2]||wb.Sheets[sh[1]||sh[0]],{defval:''});
+        setLp(78,'Cargando Hoja 3 — Historial 2025…',allData.asociados.length.toLocaleString('es-CO')+' perfiles H2');
+        allData.historial=XLSX.utils.sheet_to_json(wb.Sheets[s3]||wb.Sheets[sh[2]||sh[0]],{defval:''});
+        setLp(88,'Construyendo índices y agrupaciones…',allData.historial.length.toLocaleString('es-CO')+' registros H3');
+
+        setTimeout(()=>{
+          buildView();
+          setLp(96,'Indexando historial 2025…','Optimizando búsquedas…');
+          setTimeout(()=>{
+            // Ocultar barra y mostrar estado OK
+            document.getElementById('loadWrap').style.display='none';
+            const ok=document.getElementById('statusOk');
+            ok.style.display='block';
+            document.getElementById('sokFile').textContent=file.name+' — cargado correctamente';
+            document.getElementById('sokChips').innerHTML=
+              `<span>📋 <b>${allData.tx.length.toLocaleString('es-CO')}</b> registros H1</span>
+               <span>👤 <b>${allData.asociados.length.toLocaleString('es-CO')}</b> perfiles H2</span>
+               <span>📅 <b>${allData.historial.length.toLocaleString('es-CO')}</b> registros H3</span>`;
+            // Reset upload zone
+            document.getElementById('uic').textContent='✅';
+            document.getElementById('utitle').textContent=file.name;
+            document.getElementById('usub').textContent='Archivo cargado. Análisis en progreso…';
+            dz.style.background='var(--vbg)';dz.style.borderColor='var(--vm)';
+            // Diagnóstico
+            buildDiag();
+            // INICIAR ANÁLISIS AUTOMÁTICO
+            runAutoAnalysis();
+          },200);
+        },80);
+      }catch(err){
+        document.getElementById('loadWrap').style.display='none';
+        alert('Error al procesar el archivo: '+err.message);
+        resetDz();
+      }
+    },50);
+  };
+  reader.onerror=()=>{alert('No se pudo leer el archivo.');resetDz();};
+  reader.readAsArrayBuffer(file);
+}
+
+function resetDz(){
+  document.getElementById('uic').textContent='📊';
+  document.getElementById('utitle').textContent='Haga clic o arrastre su archivo Excel aquí';
+  document.getElementById('usub').textContent='Formatos: .xlsx · .xls';
+  dz.style.background='var(--vbg)';dz.style.borderColor='var(--vm)';dz.style.cursor='pointer';
+  dz.onclick=()=>fi.click();
+}
+
+function buildDiag(){
+  const c1=allData.tx.length>0?Object.keys(allData.tx[0]):[];
+  const c2=allData.asociados.length>0?Object.keys(allData.asociados[0]):[];
+  const d=document.getElementById('colDiag');
+  d.style.display='block';
+  d.innerHTML=`<details style="font-size:.75rem;color:var(--gm)">
+    <summary style="cursor:pointer;color:var(--vd);font-weight:600">🔍 Diagnóstico de columnas detectadas</summary>
+    <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><b style="color:var(--vd)">H1 (${c1.length} cols):</b><br><span style="font-family:monospace;font-size:.67rem">${c1.map(c=>`"${c}"`).join(', ')}</span></div>
+      <div><b style="color:var(--vd)">H2 (${c2.length} cols):</b><br><span style="font-family:monospace;font-size:.67rem">${c2.map(c=>`"${c}"`).join(', ')}</span></div>
+    </div>
+  </details>`;
+}
+
+// ══════════ BUILD VIEW ══════════
+function buildView(){
+  function norm(s){return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim()}
+  function bkm(obj){const m={};Object.keys(obj).forEach(k=>{m[norm(k)]=k});return m}
+  function gv(obj,km,...cands){
+    const ks=Object.keys(obj);
+    for(const c of cands){
+      const nc=norm(c);
+      const r=km[nc];
+      if(r!=null&&obj[r]!=null&&obj[r]!=='') return obj[r];
+      const ws=nc.split(' ').filter(w=>w.length>2);
+      if(ws.length>0){const p=ks.find(k=>ws.every(w=>norm(k).includes(w)));if(p!=null&&obj[p]!=null) return obj[p]}
+    }
+    return undefined;
+  }
+  function gn(obj,km,...c){const v=gv(obj,km,...c);if(v==null||v==='') return 0;if(typeof v==='number') return v;return parseFloat(String(v).replace(/[^\d.-]/g,''))||0}
+  function gs(obj,km,...c){const v=gv(obj,km,...c);return v==null?'':String(v).trim()}
+  function normId(v){return String(v).replace(/\.0$/,'').trim()}
+
+  // Índice H2
+  const asoMap={};
+  allData.asociados.forEach(a=>{
+    const km=bkm(a);
+    const id=normId(gv(a,km,'Identificación','Identificacion','ID','id')||'');
+    if(id&&id!=='undefined') asoMap[id]={data:a,km};
+  });
+
+  // Agrupar H1
+  const txAgg={};
+
+  // DEBUG: ver qué columnas tiene la primera fila de H1
+  if(allData.tx.length>0){
+    const sample=allData.tx[0];
+    const sKeys=Object.keys(sample);
+    const estadoKey=sKeys.find(k=>k.trim().toLowerCase().replace(/\u0300-\u036f/g,'').includes('estado'));
+    console.log('▶ Columnas H1:',sKeys);
+    console.log('▶ Clave estado encontrada:',estadoKey,'→',estadoKey?sample[estadoKey]:'N/A');
+  }
+
+  allData.tx.forEach(row=>{
+    const km=bkm(row);
+    const id=normId(gv(row,km,'Identificación','Identificacion','ID','id')||'');
+    if(!id||id==='undefined'||id==='null') return;
+
+    // Leer estado con scan directo de claves — más confiable que gv()
+    const allRowKeys=Object.keys(row);
+    const estadoKey=allRowKeys.find(k=>{
+      const kn=k.toLowerCase().replace(/\s+/g,'').replace(/[^a-z]/g,'');
+      return kn==='estadoasociado'||kn==='estadodelasociado';
+    });
+    const estadoVal=estadoKey?String(row[estadoKey]||'').trim():'';
+
+    if(!txAgg[id]) txAgg[id]={id,
+      nombre: gs(row,km,'Asociado','Nombre asociado','Nombre'),
+      agencia:gs(row,km,'Agencia'),
+      estado: estadoVal,
+      fechaAct:gs(row,km,'Fecha última actualización de datos ','Fecha última actualización de datos','Fecha actualizacion'),
+      conEf:0,conCh:0,retEf:0,retCh:0,numTx:0,diasMov:0,maxEfDia:0,rawRows:[]};
+    const r=txAgg[id];
+    const cEf=gn(row,km,'Consignado Efectivo');
+    const cCh=gn(row,km,'Consignado Cheque');
+    const rEf=gn(row,km,'Retirado Efectivo');
+    const rCh=gn(row,km,'Retirado Cheque');
+    const nTx=parseInt(String(gv(row,km,'Número de Transacciones','Numero de Transacciones')||1).replace(/[^0-9]/g,''))||1;
+    r.conEf+=cEf;r.conCh+=cCh;r.retEf+=rEf;r.retCh+=rCh;r.numTx+=nTx;
+    if(cEf+rEf>0){r.diasMov++;if(cEf+rEf>r.maxEfDia) r.maxEfDia=cEf+rEf}
+    r.rawRows.push(row);
+  });
+
+  // Enriquecer con H2 — estado de H1 tiene prioridad absoluta
+  filteredData=Object.values(txAgg).map(r=>{
+    const en=asoMap[r.id];
+    const aso=en?en.data:{};const km2=en?en.km:{};
+    // Buscar estado en H2 con scan directo de claves
+    const asoKeys=Object.keys(aso);
+    const estKey2=asoKeys.find(k=>k.replace(/\s/g,'').toLowerCase().includes('estadodel')||k.trim()==='Estado del asociado');
+    const estadoH2=estKey2?String(aso[estKey2]||'').trim():'';
+    const estadoFinal=(r.estado&&r.estado.length>0)?r.estado:estadoH2;
+    return {...r,estado:estadoFinal,
+      tipoId:gs(aso,km2,'Tipo Id','TipoId'),
+      ingresos:gn(aso,km2,'Ingresos'),
+      actividad:gs(aso,km2,'Actividad Laboral'),
+      direccion:gs(aso,km2,'Dirección','Direccion')
+    };
+  });
+
+  // DEBUG: verificar clasificación de estados
+  const dbInact=filteredData.filter(r=>r.estado.toLowerCase().includes('inactivo'));
+  console.log(`▶ Total: ${filteredData.length} | Inactivos: ${dbInact.length}`);
+  if(dbInact.length>0) console.log('▶ Muestra inactivos:',dbInact.slice(0,3).map(r=>({id:r.id,estado:r.estado,ef:r.conEf+r.retEf})));
+
+  if(filteredData.length===0&&allData.asociados.length>0){
+    filteredData=allData.asociados.map(a=>{
+      const km=bkm(a);const id=normId(gv(a,km,'Identificación','ID')||'');
+      return{id,nombre:gs(a,km,'Nombre asociado','Nombre'),agencia:gs(a,km,'Agencia'),
+        estado:gs(a,km,'Estado del asociado','Estado'),fechaAct:'',
+        conEf:0,conCh:0,retEf:0,retCh:0,numTx:0,diasMov:0,maxEfDia:0,rawRows:[],
+        tipoId:gs(a,km,'Tipo Id'),ingresos:gn(a,km,'Ingresos'),
+        actividad:gs(a,km,'Actividad Laboral'),direccion:gs(a,km,'Dirección')};
+    });
+  }
+
+  // Poblar filtros
+  const ags=[...new Set(filteredData.map(r=>r.agencia).filter(Boolean))].sort();
+  const selAg=document.getElementById('fAg');
+  selAg.innerHTML='<option value="">Todas</option>';
+  ags.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;selAg.appendChild(o)});
+
+  buildStats();
+  document.getElementById('statsSection').style.display='block';
+  document.getElementById('tableSection').style.display='block';
+  document.getElementById('pendNotice').style.display='block';
+  applyFilters();
+
+  // Pre-construir índice historial
+  histIndex=null;
+  setTimeout(()=>buildHistIndex(),100);
+}
+
+function buildHistIndex(){
+  if(histIndex) return;
+  histIndex={};
+  allData.historial.forEach(h=>{
+    const hid=String(getCol(h,'Identificación','Identificacion','ID')||'').replace(/\.0$/,'').trim();
+    if(!hid||hid==='undefined') return;
+    if(!histIndex[hid]) histIndex[hid]=[];
+    histIndex[hid].push(h);
+  });
+}
+function getHistForId(id){if(!histIndex) buildHistIndex();return histIndex[id]||[]}
+
+// ══════════ ANÁLISIS AUTOMÁTICO ══════════
+function runAutoAnalysis(){
+  buildHistIndex();
+  const pending=filteredData.filter(r=>!riskCache[r.id]);
+  if(pending.length===0){document.getElementById('pendNotice').style.display='none';return;}
+
+  const aw=document.getElementById('analisisWrap');
+  aw.style.display='block';
+  document.getElementById('pendNotice').style.display='none';
+
+  const total=pending.length;
+  let done=0,nAlto=0,nMedio=0,nBajo=0;
+  const LOTE=100;
+
+  function lote(desde){
+    const hasta=Math.min(desde+LOTE,total);
+    for(let i=desde;i<hasta;i++){
+      const row=pending[i];
+      try{
+        const hist=getHistForId(row.id);
+        const a=callAI(row,hist);
+        // Validar que callAI devolvió objeto real (no Promise)
+        if(!a||typeof a!=='object'||typeof a.nivel_riesgo==='undefined'){
+          console.error('callAI devolvió resultado inválido para id',row.id,a);
+          riskCache[row.id]='Bajo';nBajo++;
+        } else {
+          const niv=a.nivel_riesgo||'Bajo';
+          riskCache[row.id]=niv;
+          analysisCache[row.id]=a;
+          if(niv==='Alto') nAlto++;
+          else if(niv==='Medio') nMedio++;
+          else nBajo++;
+        }
+      }catch(e){
+        console.error('Error en callAI id',row.id,e.message);
+        riskCache[row.id]='Bajo';nBajo++;
+      }
+      done++;
+    }
+    // Log cada primer lote para verificar
+    if(desde===0) console.log(`▶ Primer lote: Alto=${nAlto} Medio=${nMedio} Bajo=${nBajo}`);
+    const pct=Math.round(done/total*100);
+    document.getElementById('apBar').style.width=pct+'%';
+    document.getElementById('apPct').textContent=pct+'%';
+    document.getElementById('apPhase').textContent=`Analizando ${done.toLocaleString('es-CO')} de ${total.toLocaleString('es-CO')} asociados…`;
+    document.getElementById('apAlto').textContent=nAlto;
+    document.getElementById('apMedio').textContent=nMedio;
+    document.getElementById('apBajo').textContent=nBajo;
+
+    if(hasta<total){
+      requestAnimationFrame(()=>lote(hasta));
+      // Actualizar tablero cada 500 procesados
+      if(done%500===0){buildStats();applyFilters()}
+    }else{
+      // TERMINÓ
+      aw.style.display='none';
+      document.getElementById('pendNotice').style.display='none';
+      document.getElementById('usub').textContent=`Análisis completo — ${nAlto} Alto · ${nMedio} Medio · ${nBajo} Bajo`;
+      document.getElementById('btnExp').style.display='inline-flex';
+      buildStats();
+      applyFilters();
+    }
+  }
+  requestAnimationFrame(()=>lote(0));
+}
+
+// ══════════ STATS ══════════
+function buildStats(){
+  const tot=filteredData.length;
+  const act=filteredData.filter(r=>r.estado.toLowerCase()==='activo').length;
+  const tTx=filteredData.reduce((s,r)=>s+r.numTx,0);
+  const tEf=filteredData.reduce((s,r)=>s+r.conEf+r.retEf,0);
+  const tCh=filteredData.reduce((s,r)=>s+r.conCh+r.retCh,0);
+  const nA=Object.values(riskCache).filter(v=>v==='Alto').length;
+  const nM=Object.values(riskCache).filter(v=>v==='Medio').length;
+  const nB=Object.values(riskCache).filter(v=>v==='Bajo').length;
+  document.getElementById('sgrid').innerHTML=`
+    <div class="sc"><div class="sn">${tot.toLocaleString('es-CO')}</div><div class="sl">Asociados (H1)</div></div>
+    <div class="sc"><div class="sn">${act.toLocaleString('es-CO')}</div><div class="sl">Activos</div></div>
+    <div class="sc"><div class="sn">${tTx.toLocaleString('es-CO')}</div><div class="sl">Total Transacciones</div></div>
+    <div class="sc"><div class="sn">${fmt(tEf)}</div><div class="sl">Vol. Efectivo Total</div></div>
+    <div class="sc"><div class="sn">${fmt(tCh)}</div><div class="sl">Vol. Cheque Total</div></div>
+    <div class="sc alto"><div class="sn">${nA.toLocaleString('es-CO')}</div><div class="sl">Riesgo Alto</div></div>
+    <div class="sc medio"><div class="sn">${nM.toLocaleString('es-CO')}</div><div class="sl">Riesgo Medio</div></div>
+    <div class="sc bajo"><div class="sn">${nB.toLocaleString('es-CO')}</div><div class="sl">Riesgo Bajo</div></div>`;
+}
+
+// ══════════ FILTERS ══════════
+function applyFilters(){
+  const srch=document.getElementById('srch').value.toLowerCase();
+  const ag=document.getElementById('fAg').value;
+  const est=document.getElementById('fEst').value;
+  const cat=document.getElementById('fCat').value;
+  const vis=document.getElementById('fVista').value;
+  const data=filteredData.filter(r=>{
+    if(srch&&!r.nombre.toLowerCase().includes(srch)&&!String(r.id).includes(srch)) return false;
+    if(ag&&r.agencia!==ag) return false;
+    if(est&&r.estado.toLowerCase()!==est.toLowerCase()) return false;
+    if(cat){
+      const actN=(r.actividad||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      const catN=cat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      if(actN!==catN) return false;
+    }
+    return true;
+  });
+  if(vis==='board') renderBoard(data);
+  else renderTabla(data);
+}
+function clearFilters(){
+  document.getElementById('srch').value='';
+  document.getElementById('fAg').value='';
+  document.getElementById('fEst').value='';
+  document.getElementById('fCat').value='';
+  applyFilters();
+}
+
+// ══════════ BOARD ══════════
+function renderBoard(data){
+  document.getElementById('vBoard').style.display='grid';
+  document.getElementById('vTabla').style.display='none';
+  document.getElementById('tempty').style.display='none';
+
+  const alto=data.filter(r=>riskCache[r.id]==='Alto');
+  const medio=data.filter(r=>riskCache[r.id]==='Medio');
+  const bajo=data.filter(r=>riskCache[r.id]==='Bajo');
+  const sinAn=data.filter(r=>!riskCache[r.id]);
+
+  document.getElementById('cntA').textContent=alto.length;
+  document.getElementById('cntM').textContent=medio.length;
+  document.getElementById('cntB').textContent=bajo.length;
+
+  // ── CIA: guardar resumen en Supabase ─────────────────────────────────
+  if (typeof window.guardarResultadoCIA === 'function') {
+    window.guardarResultadoCIA({
+      total: alto.length + medio.length + bajo.length,
+      alto:  alto.length,
+      medio: medio.length,
+      bajo:  bajo.length,
+    });
+  }
+
+  const fill=(col,items,nivel)=>{
+    if(!items.length){col.innerHTML='<div class="bempty">Sin asociados en esta categoría</div>';return}
+    col.innerHTML=items.slice(0,200).map(r=>cardHtml(r,nivel)).join('');
+    if(items.length>200) col.insertAdjacentHTML('beforeend',
+      `<div style="padding:10px;text-align:center;font-size:.73rem;color:var(--gm)">…y ${items.length-200} más. Use filtros para navegar.</div>`);
+  };
+  fill(document.getElementById('colA'),alto,'Alto');
+  fill(document.getElementById('colM'),medio,'Medio');
+  fill(document.getElementById('colB'),bajo,'Bajo');
+
+  const tot=alto.length+medio.length+bajo.length;
+  document.getElementById('irow').innerHTML=
+    `<strong>${data.length}</strong> asociados ·
+     <span style="color:var(--ra);font-weight:600">${alto.length} Alto</span> ·
+     <span style="color:var(--na);font-weight:600">${medio.length} Medio</span> ·
+     <span style="color:var(--vc);font-weight:600">${bajo.length} Bajo</span>
+     ${sinAn.length>0?`· <span>${sinAn.length} analizando…</span>`:''}`;
+}
+
+function cardHtml(r,nivel){
+  const a=analysisCache[r.id];
+  const totalEf=r.conEf+r.retEf;
+  const totalCh=r.conCh+r.retCh;
+  const nc=nivel?nivel.toLowerCase():'bajo';
+  const alertN=a?(a.senales_alerta||[]).filter(x=>!x.startsWith('ℹ️')).length:0;
+  const alertBadge=alertN>0
+    ?`<span class="badge-al">⚠ ${alertN} alerta${alertN>1?'s':''}</span>`
+    :`<span class="badge-ok">✓ Sin alertas críticas</span>`;
+  const estadoClass=r.estado.toLowerCase()==='activo'?'badge-est-a':'badge-est-i';
+  const estadoLabel=r.estado||'—';
+  const act=r.actividad&&r.actividad.trim().length>2?r.actividad.trim():'Sin actividad registrada';
+  const rec=a&&a.recomendaciones&&a.recomendaciones.length>0?a.recomendaciones[0]:'Pendiente de análisis';
+
+  return `<div class="card-aso" onclick="analyzeOne('${r.id}')">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+      <div style="min-width:0;flex:1">
+        <div class="ca-name" title="${r.nombre||r.id}">${r.nombre||r.id}</div>
+        <div class="ca-sub">${r.tipoId||'CC'} ${r.id} · Ag. ${r.agencia||'—'} · <span class="${estadoClass}">● ${estadoLabel}</span></div>
+        <div class="ca-sub">🏢 ${act}</div>
+      </div>
+      <div style="flex-shrink:0">${alertBadge}</div>
+    </div>
+    <div class="ca-chips">
+      <div class="ca-chip"><span class="ck">Ef. período</span><span class="cv">${totalEf>0?fmt(totalEf):'—'}</span></div>
+      <div class="ca-chip"><span class="ck">Cheque período</span><span class="cv">${totalCh>0?fmt(totalCh):'—'}</span></div>
+      <div class="ca-chip"><span class="ck">Ingresos dec.</span><span class="cv">${r.ingresos>0?fmt(r.ingresos):'No registrado'}</span></div>
+      <div class="ca-chip"><span class="ck">Transacciones</span><span class="cv">${r.numTx} · ${r.diasMov} día(s)</span></div>
+    </div>
+    <div class="ca-rec ${nc}">→ ${rec}</div>
+  </div>`;
+}
+
+// ══════════ TABLA ══════════
+const PAGE=200;let curPage=0;let curData=[];
+function renderTabla(data){
+  document.getElementById('vBoard').style.display='none';
+  document.getElementById('vTabla').style.display='block';
+  curData=data;curPage=0;
+  if(!data.length){document.getElementById('tbody').innerHTML='';document.getElementById('tempty').style.display='block';return}
+  document.getElementById('tempty').style.display='none';
+  document.getElementById('tbody').innerHTML=data.slice(0,PAGE).map(rowHtml).join('');
+  updateTinfo(data);
+}
+function updateTinfo(data){
+  const shown=Math.min((curPage+1)*PAGE,data.length);
+  document.getElementById('tinfo').innerHTML=
+    `<span>Mostrando <strong>${shown}</strong> de <strong>${data.length}</strong></span>
+     ${data.length>shown?`<button class="btn btn-s" style="padding:4px 10px;font-size:.73rem" onclick="loadMore()">+ Cargar más</button>`:''}`;
+}
+function loadMore(){
+  curPage++;
+  const start=curPage*PAGE;
+  document.getElementById('tbody').insertAdjacentHTML('beforeend',curData.slice(start,start+PAGE).map(rowHtml).join(''));
+  updateTinfo(curData);
+}
+function rowHtml(r){
+  const risk=riskCache[r.id];
+  const rb=risk?`<span class="badge ${risk==='Alto'?'b-a':risk==='Medio'?'b-m':'b-b'}">${risk}</span>`:'<span style="color:var(--gm);font-size:.75rem">—</span>';
+  const eb=r.estado.toLowerCase()==='activo'?'<span class="badge b-on">Activo</span>'
+    :r.estado.toLowerCase().includes('inactivo')?'<span class="badge b-off" style="background:var(--rbg);color:var(--ra)">Inactivo</span>'
+    :`<span class="badge b-off">${r.estado||'—'}</span>`;
+  const a=analysisCache[r.id];
+  const nAl=a?(a.senales_alerta||[]).filter(x=>!x.startsWith('ℹ️')).length:'—';
+  return `<tr>
+    <td><code style="font-size:.8rem;color:var(--vd)">${r.id}</code></td>
+    <td><strong style="font-size:.83rem">${r.nombre||'—'}</strong></td>
+    <td>${r.agencia||'—'}</td><td>${eb}</td>
+    <td style="font-size:.8rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.actividad||'—'}</td>
+    <td class="tr nc">${r.conEf+r.retEf>0?fmtFull(r.conEf+r.retEf):'—'}</td>
+    <td class="tr"><strong>${r.numTx}</strong></td>
+    <td>${rb}</td>
+    <td style="text-align:center">${nAl}</td>
+    <td><button class="btn btn-s" style="padding:4px 8px;font-size:.78rem" onclick="analyzeOne('${r.id}')">🔎</button></td>
+  </tr>`;
+}
+
+// ══════════ ANÁLISIS INDIVIDUAL ══════════
+function analyzeOne(id){
+  const row=filteredData.find(r=>r.id===id);if(!row) return;
+  document.getElementById('panTitle').textContent=row.nombre||id;
+  document.getElementById('panSub').textContent=`${row.tipoId||'CC'}: ${id} · Ag. ${row.agencia||'—'}`;
+  document.getElementById('panFoot').style.display='none';
+  document.getElementById('overlay').classList.add('open');
+
+  if(analysisCache[id]){
+    curAnalysis={row,analysis:analysisCache[id]};
+    renderPanel(row,analysisCache[id],getHistForId(id));
+    return;
+  }
+  document.getElementById('panBody').innerHTML=`
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:14px">
+      <div class="lp-spin" style="width:36px;height:36px;border-width:4px"></div>
+      <p style="font-size:.84rem;color:var(--gm);text-align:center">Procesando análisis SARLAFT…</p>
+    </div>`;
+  requestAnimationFrame(()=>{
+    const hist=getHistForId(id);
+    const a=callAI(row,hist);
+    analysisCache[id]=a;riskCache[id]=a.nivel_riesgo;
+    curAnalysis={row,analysis:a};
+    renderPanel(row,a,hist);
+    buildStats();applyFilters();
+  });
+}
+function closePanel(){document.getElementById('overlay').classList.remove('open')}
+function closePanelClick(e){if(e.target===document.getElementById('overlay')) closePanel()}
+
+function renderPanel(row,a,hist){
+  const niv=a.nivel_riesgo||'Bajo';
+  const nc=niv.toLowerCase()==='alto'?'ra':niv.toLowerCase()==='medio'?'me':'bj';
+  const alertasCrit=(a.senales_alerta||[]).filter(x=>!x.startsWith('ℹ️'));
+  const alertasInfo=(a.senales_alerta||[]).filter(x=>x.startsWith('ℹ️'));
+
+  // Ficha comparativa H1 vs H3
+  let h3Ef=0,h3Ch=0;
+  hist.forEach(h=>{h3Ef+=Number(getCol(h,'Consignado Efectivo')||0)+Number(getCol(h,'Retirado Efectivo')||0);
+                   h3Ch+=Number(getCol(h,'Consignado Cheque')||0)+Number(getCol(h,'Retirado Cheque')||0)});
+
+  const html=`
+    <!-- FICHA -->
+    <div style="background:var(--vbg);border:1px solid var(--vbr);border-radius:var(--rs);padding:13px 15px;margin-bottom:16px;font-size:.82rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 16px;margin-bottom:10px">
+        <div><span style="color:var(--gm);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em">Identificación</span><br><strong>${row.tipoId||'CC'} ${row.id}</strong></div>
+        <div><span style="color:var(--gm);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em">Agencia</span><br><strong>${row.agencia||'—'}</strong></div>
+        <div><span style="color:var(--gm);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em">Estado</span><br><strong>${row.estado||'—'}</strong></div>
+        <div><span style="color:var(--gm);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em">Actividad Laboral</span><br><strong>${row.actividad&&row.actividad.trim().length>2?row.actividad.trim():'No registrada'}</strong></div>
+        <div><span style="color:var(--gm);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em">Ingresos declarados</span><br><strong>${fmtFull(row.ingresos)}</strong></div>
+        <div><span style="color:var(--gm);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em">Días con movimiento</span><br><strong>${row.diasMov} días · ${row.rawRows.length} registros H1</strong></div>
+      </div>
+      <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--vd);margin-bottom:6px">Comparativo H1 (período) vs H3 (historial 2025)</div>
+      <table class="ficha-comp">
+        <tr><th>Concepto</th><th>H1 — Período actual</th><th>H3 — Historial 2025</th></tr>
+        <tr><td>Consignado Efectivo</td><td>${fmtFull(row.conEf)}</td><td>${fmtFull(hist.reduce((s,h)=>s+Number(getCol(h,'Consignado Efectivo')||0),0))}</td></tr>
+        <tr><td>Retirado Efectivo</td><td>${fmtFull(row.retEf)}</td><td>${fmtFull(hist.reduce((s,h)=>s+Number(getCol(h,'Retirado Efectivo')||0),0))}</td></tr>
+        <tr><td>Consignado Cheque</td><td>${fmtFull(row.conCh)}</td><td>${fmtFull(hist.reduce((s,h)=>s+Number(getCol(h,'Consignado Cheque')||0),0))}</td></tr>
+        <tr><td>Retirado Cheque</td><td>${fmtFull(row.retCh)}</td><td>${fmtFull(hist.reduce((s,h)=>s+Number(getCol(h,'Retirado Cheque')||0),0))}</td></tr>
+        <tr><td><strong>TOTAL MOV.</strong></td><td>${fmtFull(row.conEf+row.retEf+row.conCh+row.retCh)}</td><td>${fmtFull(h3Ef+h3Ch)}</td></tr>
+      </table>
+      <div style="font-size:.67rem;color:var(--gm);margin-top:5px">⚠ El análisis SARLAFT usa H1 como insumo principal. H3 es referencia histórica.</div>
+    </div>
+
+    <!-- 1. RESUMEN -->
+    <div class="ablock"><h4>📋 1. Resumen del Caso</h4><p>${a.resumen||'—'}</p></div>
+
+    <!-- 2. PERFIL VS TX -->
+    <div class="ablock"><h4>⚖️ 2. Análisis Perfil vs. Transacción</h4>
+      <ul>${(a.analisis_perfil||[]).map(p=>`<li>${p}</li>`).join('')||'<li>Sin datos disponibles</li>'}</ul></div>
+
+    <!-- 3. ALERTAS -->
+    <div class="ablock ${alertasCrit.length>0?'ra':'bj'}">
+      <h4>🚨 3. Señales de Alerta LA/FT</h4>
+      ${alertasCrit.length>0
+        ?`<ul>${alertasCrit.map(s=>`<li>${s}</li>`).join('')}</ul>`
+        :`<p style="color:#1E8449">✓ No se detectaron alertas críticas en el período analizado.</p>`}
+      ${alertasInfo.length>0?`<div style="margin-top:8px;border-top:1px solid rgba(0,0,0,.08);padding-top:8px">
+        <div style="font-size:.72rem;color:var(--gm);font-weight:600;margin-bottom:5px">Notas informativas:</div>
+        <ul>${alertasInfo.map(s=>`<li style="color:var(--gm)">${s}</li>`).join('')}</ul></div>`:''}
+    </div>
+
+    <!-- CATEGORÍAS ESPECIALES — ítem separado de validación manual -->
+    ${(a.categorias_especiales||[]).length>0?`
+    <div style="background:#FFF8E7;border:2px solid #E8C84A;border-radius:var(--rs);padding:14px 16px;margin-bottom:18px">
+      <h4 style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7D5A00;margin-bottom:6px;display:flex;align-items:center;gap:8px">
+        ⭐ Categorías Especiales — Requieren Validación Manual del Oficial de Cumplimiento
+      </h4>
+      <div style="font-size:.76rem;color:#7D5A00;margin-bottom:10px;padding:6px 10px;background:rgba(232,200,74,.15);border-radius:4px">
+        ℹ️ Las siguientes categorías <strong>NO modifican automáticamente el nivel de riesgo</strong>. 
+        Deben ser evaluadas y validadas por el Oficial de Cumplimiento para determinar si aplican 
+        procedimientos adicionales conforme a la CBJ Título V.
+      </div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:8px">
+        ${(a.categorias_especiales||[]).map(c=>`
+          <li style="font-size:.84rem;color:#5D4E00;padding:8px 12px;background:#fff;border-radius:4px;border-left:4px solid #E8C84A;line-height:1.5">${c}</li>
+        `).join('')}
+      </ul>
+      <div style="font-size:.7rem;color:#9A7B00;margin-top:10px;padding-top:8px;border-top:1px solid rgba(232,200,74,.4)">
+        📋 Documentar resultado de la validación en el expediente del asociado (CBJ §3.2.3.2).
+      </div>
+    </div>`:''}
+
+    <!-- 4. NIVEL RIESGO -->
+    <div class="ablock ${nc}">
+      <h4>🎯 4. Evaluación del Nivel de Riesgo</h4>
+      <div class="rlevel ${nc}">${niv.toUpperCase()}</div>
+      <p style="margin-top:6px">${a.justificacion_riesgo||'—'}</p>
+    </div>
+
+    <!-- 5. JUSTIFICACIÓN -->
+    <div class="ablock"><h4>📝 5. Justificación Técnica — Oficial de Cumplimiento</h4>
+      <p style="line-height:1.7">${a.justificacion_tecnica||'—'}</p>
+      ${(a.normativa_aplicable||[]).length>0
+        ?`<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:5px">${a.normativa_aplicable.map(n=>`<span class="ntag">${n}</span>`).join('')}</div>`:''}
+    </div>
+
+    <!-- VARIACIONES -->
+    ${a.variaciones_historicas?`<div class="ablock"><h4>📈 Variaciones Históricas (H3 — 2025)</h4><p style="line-height:1.7">${a.variaciones_historicas}</p></div>`:''}
+
+    <!-- 6. RECOMENDACIONES -->
+    <div class="ablock"><h4>✅ 6. Recomendaciones de Acción</h4>
+      <ul>${(a.recomendaciones||[]).map(r=>`<li>${r}</li>`).join('')||'<li>Mantener monitoreo estándar.</li>'}</ul></div>
+
+    <hr class="div">
+    <div style="font-size:.73rem;color:var(--gm);line-height:1.8">
+      <strong>Fuentes:</strong> H1: ${row.rawRows.length} registros · H2: perfil · H3: ${hist.length} registros históricos<br>
+      <strong>Generado:</strong> ${new Date().toLocaleString('es-CO')} · <strong>Motor:</strong> SARLAFT/Coopetraban
+    </div>`;
+
+  document.getElementById('panBody').innerHTML=html;
+  document.getElementById('panFoot').style.display='flex';
+}
+
+// ══════════ EXPORTACIÓN EXCEL PROFESIONAL ══════════
+// 3 hojas: ALTO (rojo) · MEDIO (naranja) · BAJO (verde)
+// SheetJS (XLSX) ya incluido en la página
+
+function exportarExcel(){
+  const analizados = filteredData.filter(r => riskCache[r.id]);
+  if(!analizados.length){alert('No hay asociados analizados. Ejecute primero el análisis masivo.');return}
+
+  const wb = XLSX.utils.book_new();
+  wb.Props = {
+    Title: 'Informe SARLAFT Coopetraban',
+    Author: 'Oficial de Cumplimiento — Coopetraban',
+    CreatedDate: new Date()
+  };
+
+  const por = { Alto:[], Medio:[], Bajo:[] };
+  analizados.forEach(r => { if(por[riskCache[r.id]]) por[riskCache[r.id]].push(r) });
+
+  const fecha = new Date().toLocaleString('es-CO',{dateStyle:'long',timeStyle:'short'});
+
+  // ── Columnas del informe ──
+  const COLS = [
+    'N°','Identificación','Tipo ID','Nombre Asociado','Agencia','Estado',
+    'Actividad Laboral','Ingresos Declarados',
+    'Ef. Consignado','Ef. Retirado','Total Efectivo',
+    'Ch. Consignado','Ch. Retirado','Total Cheque',
+    'Total Movimiento','N° Transacciones','Días con Movimiento',
+    'Mayor Op. Diaria (Ef.)','Prom. Ef. Mensual Hist.',
+    'Nivel de Riesgo','Puntaje','N° Alertas Críticas',
+    'Categorías Especiales',
+    'Alertas Críticas','Notas Informativas',
+    'Análisis de Perfil','Variaciones Históricas',
+    'Justificación Técnica','Recomendaciones',
+    'Normativa Aplicable','Fecha de Análisis'
+  ];
+
+  const ANCHO = [5,16,8,35,8,10,22,18,16,16,16,16,16,16,16,10,8,16,18,14,8,12,35,60,50,60,50,80,80,50,22];
+
+  ['Alto','Medio','Bajo'].forEach(nivel => {
+    const items = por[nivel];
+    const rows  = [];
+
+    // ── Fila de título ──
+    rows.push([`INFORME SARLAFT — COOPETRABAN · RIESGO ${nivel.toUpperCase()} · ${items.length} asociados · ${fecha}`]);
+    rows.push([]); // espaciado
+    rows.push(COLS); // encabezados
+
+    // ── Filas de datos ──
+    items.forEach((r, i) => {
+      const a   = analysisCache[r.id] || {};
+      const crit = (a.senales_alerta||[]).filter(x=>!x.startsWith('ℹ️'));
+      const info = (a.senales_alerta||[]).filter(x=>x.startsWith('ℹ️')).map(x=>x.replace('ℹ️ ',''));
+      const cats = (a.categorias_especiales||[]);
+
+      rows.push([
+        i+1,
+        r.id,
+        r.tipoId||'CC',
+        (r.nombre||'').trim(),
+        r.agencia||'',
+        r.estado||'',
+        r.actividad||'',
+        r.ingresos||0,
+        r.conEf||0,
+        r.retEf||0,
+        (r.conEf||0)+(r.retEf||0),
+        r.conCh||0,
+        r.retCh||0,
+        (r.conCh||0)+(r.retCh||0),
+        (r.conEf||0)+(r.retEf||0)+(r.conCh||0)+(r.retCh||0),
+        r.numTx||0,
+        r.diasMov||0,
+        r.maxEfDia||0,
+        (() => {
+          const hist = getHistForId(r.id);
+          if(!hist.length) return 0;
+          const hEf = hist.reduce((s,h)=>s+Number(getCol(h,'Consignado Efectivo')||0)+Number(getCol(h,'Retirado Efectivo')||0),0);
+          const mes = new Set(hist.map(h=>String(getCol(h,'Mes','mes')||''))).size||1;
+          return Math.round(hEf/mes);
+        })(),
+        a.nivel_riesgo||'',
+        (() => {
+          // recalcular puntaje desde alertas
+          const nc = crit.length*2;
+          const tef=(r.conEf||0)+(r.retEf||0);
+          const ag = tef>=100000000?4:tef>=50000000?3:tef>=30000000?1:0;
+          const inact=(r.estado||'').toLowerCase().includes('inactivo')&&((r.conEf||0)+(r.retEf||0)+(r.conCh||0)+(r.retCh||0))>0?3:0;
+          return nc+ag+inact;
+        })(),
+        crit.length,
+        cats.map(c=>c.replace(/^[^\w]+/,'')).join(' | ') || '—',
+        crit.join(' | ') || 'Sin alertas críticas',
+        info.join(' | ') || 'Sin notas',
+        (a.analisis_perfil||[]).join(' | ')||'—',
+        a.variaciones_historicas||'—',
+        a.justificacion_tecnica||'—',
+        (a.recomendaciones||[]).map((rec,i)=>`${i+1}. ${rec}`).join(' | ')||'—',
+        (a.normativa_aplicable||[]).join(' · ')||'—',
+        fecha
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // ── Anchos de columna ──
+    ws['!cols'] = ANCHO.map(w=>({wch:w}));
+
+    // ── Filas de altura ──
+    ws['!rows'] = rows.map((_,i)=>({
+      hpt: i===0?30 : i===1?6 : i===2?30 : 60
+    }));
+
+    // ── Merge para fila de título ──
+    ws['!merges'] = [{s:{r:0,c:0},e:{r:0,c:COLS.length-1}}];
+
+    // ── Estilos ──
+    const COLOR = { Alto:'C0392B', Medio:'E67E22', Bajo:'1E8449' };
+    const BG    = { Alto:'FADBD8', Medio:'FDEBD0', Bajo:'D5F5E3' };
+    const HEADER_BG = { Alto:'E74C3C', Medio:'E67E22', Bajo:'27AE60' };
+
+    // Función de referencia de celda
+    const ref = (r,c) => XLSX.utils.encode_cell({r,c});
+
+    // Estilo título (fila 0)
+    if(!ws[ref(0,0)]) ws[ref(0,0)]={v:rows[0][0],t:'s'};
+    ws[ref(0,0)].s = {
+      font:{bold:true,sz:13,color:{rgb:'FFFFFF'}},
+      fill:{fgColor:{rgb:HEADER_BG[nivel]}},
+      alignment:{horizontal:'center',vertical:'center',wrapText:true},
+      border:{bottom:{style:'medium',color:{rgb:COLOR[nivel]}}}
+    };
+
+    // Estilo encabezados (fila 2)
+    COLS.forEach((_,ci)=>{
+      const cell = ws[ref(2,ci)];
+      if(!cell) return;
+      cell.s = {
+        font:{bold:true,sz:9,color:{rgb:'FFFFFF'}},
+        fill:{fgColor:{rgb:HEADER_BG[nivel]}},
+        alignment:{horizontal:'center',vertical:'center',wrapText:true},
+        border:{
+          top:{style:'thin',color:{rgb:'FFFFFF'}},
+          bottom:{style:'medium',color:{rgb:COLOR[nivel]}},
+          left:{style:'thin',color:{rgb:'FFFFFF'}},
+          right:{style:'thin',color:{rgb:'FFFFFF'}}
+        }
+      };
+    });
+
+    // Estilos filas de datos (desde fila 3)
+    const moneyFmt = '#,##0';
+    const moneyCols = [7,8,9,10,11,12,13,14,17,18]; // índices de columnas monetarias
+    for(let ri=3; ri<rows.length; ri++){
+      const fila = rows[ri];
+      const esPar = (ri-3)%2===0;
+      const bgFila = esPar ? 'FFFFFF' : BG[nivel];
+      fila.forEach((_,ci)=>{
+        const cell = ws[ref(ri,ci)];
+        if(!cell) return;
+        const isMoney = moneyCols.includes(ci);
+        cell.s = {
+          font:{sz:9},
+          fill:{fgColor:{rgb:bgFila}},
+          alignment:{
+            horizontal: ci===3||ci>=23?'left':'center',
+            vertical:'top',
+            wrapText: ci>=23
+          },
+          numFmt: isMoney ? moneyFmt : undefined,
+          border:{
+            top:{style:'thin',color:{rgb:'E8E8E8'}},
+            bottom:{style:'thin',color:{rgb:'E8E8E8'}},
+            left:{style:'thin',color:{rgb:'E8E8E8'}},
+            right:{style:'thin',color:{rgb:'E8E8E8'}}
+          }
+        };
+        if(isMoney && typeof cell.v==='number') cell.t='n';
+
+        // Columna "Nivel de Riesgo" (índice 19) — resaltar
+        if(ci===19){
+          cell.s.font = {bold:true,sz:9,color:{rgb:COLOR[nivel]}};
+          cell.s.fill = {fgColor:{rgb:BG[nivel]}};
+        }
+        // Columna "N° Alertas" (índice 21) — resaltar si > 0
+        if(ci===21 && typeof cell.v==='number' && cell.v>0){
+          cell.s.font = {bold:true,sz:9,color:{rgb:'C0392B'}};
+        }
+        // Columna "Categorías Especiales" (índice 22) — resaltar si tiene valor
+        if(ci===22 && cell.v && cell.v!=='—'){
+          cell.s.font = {bold:true,sz:9,color:{rgb:'7D5A00'}};
+          cell.s.fill = {fgColor:{rgb:'FFF8E7'}};
+        }
+      });
+    }
+
+    // Nombre de la hoja con emoji y conteo
+    const ICONO = {Alto:'🔴',Medio:'🟠',Bajo:'🟢'};
+    const sheetName = `${nivel} (${items.length})`;
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  // ── Hoja 4: Resumen Ejecutivo ──
+  const totalAn  = analizados.length;
+  const nAlto    = por.Alto.length;
+  const nMedio   = por.Medio.length;
+  const nBajo    = por.Bajo.length;
+  const resRows  = [
+    ['INFORME SARLAFT — COOPETRABAN'],
+    ['Resumen Ejecutivo del Período'],
+    [],
+    ['Generado por', 'Oficial de Cumplimiento — Sistema SARLAFT Coopetraban'],
+    ['Fecha de análisis', fecha],
+    ['Normativa base', 'Circular Básica Jurídica Título V — Supersolidaria | Arts. 102-107 EOSF | Decreto 1674/2021 | GAFI'],
+    [],
+    ['DISTRIBUCIÓN DE RIESGO','','',''],
+    ['Nivel','Asociados','% del total','Acción requerida'],
+    ['🔴 ALTO',   nAlto,  nAlto/totalAn,  'Atención inmediata — evaluar ROS ante UIAF'],
+    ['🟠 MEDIO',  nMedio, nMedio/totalAn, 'Monitoreo reforzado — solicitar información adicional'],
+    ['🟢 BAJO',   nBajo,  nBajo/totalAn,  'Monitoreo periódico estándar'],
+    ['TOTAL',     totalAn, 1,             ''],
+    [],
+    ['UMBRALES APLICADOS',''],
+    ['Transacción individual en efectivo (un día)', '≥ $5.000.000'],
+    ['Transacciones múltiples acumuladas (mes)',    '≥ $30.000.000'],
+    ['Incoherencia efectivo vs ingresos',           '> 300% y > $5.000.000'],
+    ['Incremento abrupto vs historial',             '> 5x promedio mensual y ≥ $5.000.000'],
+    ['Inactivo con movimiento',                     'Cualquier monto — siempre ALTO'],
+    [],
+    ['SEÑALES DE ALERTA MONITOREADAS',''],
+    ['C1','Asociado INACTIVO con movimiento (CBJ §3.2.2.3.1.2)'],
+    ['C2','Operación individual ≥ $5.000.000 en efectivo en un día (CBJ §3.2.7.2.2.1)'],
+    ['C3','Efectivo acumulado ≥ $30.000.000 en el mes (CBJ §3.2.7.2.3.2)'],
+    ['C4','Efectivo supera 300% de ingresos declarados (CBJ §3.2.2.4.1)'],
+    ['C5','Sin ingresos declarados + movimiento ≥ $5.000.000 (CBJ §3.2.2.3.1.2)'],
+    ['C6','Incremento > 5x promedio histórico con monto ≥ $5.000.000 (CBJ §3.2.2.4.1)'],
+    ['C7','Posible fraccionamiento: >10 tx, total ≥ $30M, promedio < $5M/tx (CBJ §3.2.2.4.1)'],
+    ['C8','ESAL con efectivo ≥ $5.000.000 (GAFI Rec. 8)'],
+    ['C9','Retiros > 85% del efectivo y total ≥ $5.000.000 (CBJ §3.2.2.4.1)'],
+    [],
+    ['CATEGORÍAS ESPECIALES (validación manual del Oficial)',''],
+    ['CE1','PEP — Persona Expuesta Políticamente (CBJ §3.2.2.2.1 — Decreto 1674/2016)'],
+    ['CE2','Familiar PEP (CBJ §3.2.2.2.1 — Decreto 830/2021)'],
+    ['CE3','Administra Recursos Públicos (CBJ §3.2.2.2.1 — Arts. 102-107 EOSF)'],
+    ['CE4','ESAL — Entidad Sin Ánimo de Lucro (GAFI Recomendación 8)'],
+    ['CE5','Inmobiliario (Tipologías GAFILAT — CBJ §3.2.2.4.1)'],
+    ['CE6','Juegos de suerte y azar (Ley 643/2001 — CBJ §3.2.2.5.1)'],
+    ['CE7','Minero (Tipologías GAFILAT — CBJ §3.2.2.3.1.2)'],
+  ];
+
+  const wsRes = XLSX.utils.aoa_to_sheet(resRows);
+  wsRes['!cols'] = [{wch:40},{wch:55},{wch:15},{wch:55}];
+  wsRes['!merges'] = [
+    {s:{r:0,c:0},e:{r:0,c:3}},
+    {s:{r:1,c:0},e:{r:1,c:3}},
+  ];
+
+  // Estilo título resumen
+  const styleResTitle = {font:{bold:true,sz:14,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'00532F'}},alignment:{horizontal:'center',vertical:'center'}};
+  if(wsRes['A1']) wsRes['A1'].s=styleResTitle;
+  if(wsRes['A2']) wsRes['A2'].s={font:{bold:true,sz:11,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'007D4A'}},alignment:{horizontal:'center'}};
+
+  // Estilo secciones
+  ['H8','O15','W22','AE30'].forEach(addr=>{
+    if(wsRes[addr]) wsRes[addr].s={font:{bold:true,sz:10,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'00532F'}}};
+  });
+
+  // Fila de encabezado tabla
+  const hdr = XLSX.utils.encode_cell({r:8,c:0});
+  [0,1,2,3].forEach(ci=>{
+    const cell=wsRes[XLSX.utils.encode_cell({r:8,c:ci})];
+    if(cell) cell.s={font:{bold:true,sz:10,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'00532F'}},alignment:{horizontal:'center'}};
+  });
+
+  // Colores por nivel en tabla resumen
+  [{r:9,color:'C0392B',bg:'FADBD8'},{r:10,color:'E67E22',bg:'FDEBD0'},{r:11,color:'1E8449',bg:'D5F5E3'}].forEach(({r,color,bg})=>{
+    [0,1,2,3].forEach(ci=>{
+      const cell=wsRes[XLSX.utils.encode_cell({r,c:ci})];
+      if(cell){
+        cell.s={font:{bold:ci===0||ci===1,sz:10,color:{rgb:color}},fill:{fgColor:{rgb:bg}},alignment:{horizontal:'center'}};
+        if(ci===2){cell.t='n';cell.z='0.0%';}
+      }
+    });
+  });
+
+  wsRes['!rows'] = [{hpt:28},{hpt:20}];
+  XLSX.utils.book_append_sheet(wb, wsRes, 'Resumen Ejecutivo');
+
+  // ── Descargar ──
+  const fechaArchivo = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `SARLAFT_Coopetraban_${fechaArchivo}.xlsx`);
+  console.log(`✅ Excel exportado: ${totalAn} asociados — Alto:${nAlto} Medio:${nMedio} Bajo:${nBajo}`);
+}
+
+// Exportación por nivel — filtra y exporta solo ese nivel en Excel
+function exportarCol(nivel){
+  const items = filteredData.filter(r=>riskCache[r.id]===nivel);
+  if(!items.length){alert(`No hay asociados con riesgo ${nivel} para exportar.`);return}
+
+  const wb  = XLSX.utils.book_new();
+  const por = {Alto:[],Medio:[],Bajo:[]};
+  por[nivel] = items;
+  const fecha = new Date().toLocaleString('es-CO',{dateStyle:'long',timeStyle:'short'});
+
+  const COLS=['N°','Identificación','Tipo ID','Nombre Asociado','Agencia','Estado',
+    'Actividad Laboral','Ingresos Declarados','Ef. Consignado','Ef. Retirado','Total Efectivo',
+    'Ch. Consignado','Ch. Retirado','Total Cheque','Total Movimiento',
+    'N° Transacciones','Días con Movimiento','Mayor Op. Diaria (Ef.)',
+    'Nivel de Riesgo','N° Alertas Críticas','Categorías Especiales',
+    'Alertas Críticas','Notas Informativas','Análisis de Perfil',
+    'Variaciones Históricas','Justificación Técnica','Recomendaciones',
+    'Normativa Aplicable','Fecha de Análisis'];
+  const ANCHO=[5,16,8,35,8,10,22,18,16,16,16,16,16,16,16,10,8,16,14,12,35,60,50,60,50,80,80,50,22];
+  const COLOR={Alto:'C0392B',Medio:'E67E22',Bajo:'1E8449'};
+  const BG={Alto:'FADBD8',Medio:'FDEBD0',Bajo:'D5F5E3'};
+  const HD={Alto:'E74C3C',Medio:'E67E22',Bajo:'27AE60'};
+  const moneyCols=[7,8,9,10,11,12,13,14,17];
+
+  const rows=[];
+  rows.push([`INFORME SARLAFT — COOPETRABAN · RIESGO ${nivel.toUpperCase()} · ${items.length} asociados · ${fecha}`]);
+  rows.push([]);
+  rows.push(COLS);
+  items.forEach((r,i)=>{
+    const a=analysisCache[r.id]||{};
+    const crit=(a.senales_alerta||[]).filter(x=>!x.startsWith('ℹ️'));
+    const info=(a.senales_alerta||[]).filter(x=>x.startsWith('ℹ️')).map(x=>x.replace('ℹ️ ',''));
+    const cats=(a.categorias_especiales||[]);
+    rows.push([i+1,r.id,r.tipoId||'CC',(r.nombre||'').trim(),r.agencia||'',r.estado||'',
+      r.actividad||'',r.ingresos||0,r.conEf||0,r.retEf||0,(r.conEf||0)+(r.retEf||0),
+      r.conCh||0,r.retCh||0,(r.conCh||0)+(r.retCh||0),
+      (r.conEf||0)+(r.retEf||0)+(r.conCh||0)+(r.retCh||0),
+      r.numTx||0,r.diasMov||0,r.maxEfDia||0,
+      a.nivel_riesgo||'',crit.length,
+      cats.map(c=>c.replace(/^[^\w]+/,'')).join(' | ')||'—',
+      crit.join(' | ')||'Sin alertas críticas',
+      info.join(' | ')||'Sin notas',
+      (a.analisis_perfil||[]).join(' | ')||'—',
+      a.variaciones_historicas||'—',a.justificacion_tecnica||'—',
+      (a.recomendaciones||[]).map((rec,j)=>`${j+1}. ${rec}`).join(' | ')||'—',
+      (a.normativa_aplicable||[]).join(' · ')||'—',fecha]);
+  });
+
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=ANCHO.map(w=>({wch:w}));
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:COLS.length-1}}];
+  ws['!rows']=rows.map((_,i)=>({hpt:i===0?30:i===1?6:i===2?30:55}));
+  if(ws['A1']) ws['A1'].s={font:{bold:true,sz:13,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:HD[nivel]}},alignment:{horizontal:'center',vertical:'center'}};
+  COLS.forEach((_,ci)=>{const cell=ws[XLSX.utils.encode_cell({r:2,c:ci})];if(cell) cell.s={font:{bold:true,sz:9,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:HD[nivel]}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:{bottom:{style:'medium',color:{rgb:COLOR[nivel]}}}};});
+  for(let ri=3;ri<rows.length;ri++){
+    const esPar=(ri-3)%2===0;
+    rows[ri].forEach((_,ci)=>{
+      const cell=ws[XLSX.utils.encode_cell({r:ri,c:ci})];if(!cell) return;
+      cell.s={font:{sz:9},fill:{fgColor:{rgb:esPar?'FFFFFF':BG[nivel]}},alignment:{horizontal:ci===3||ci>=21?'left':'center',vertical:'top',wrapText:ci>=21},border:{bottom:{style:'thin',color:{rgb:'E8E8E8'}}}};
+      if(moneyCols.includes(ci)&&typeof cell.v==='number') cell.t='n';
+      if(ci===18) cell.s.font={bold:true,sz:9,color:{rgb:COLOR[nivel]}};
+      if(ci===19&&typeof cell.v==='number'&&cell.v>0) cell.s.font={bold:true,sz:9,color:{rgb:'C0392B'}};
+      if(ci===20&&cell.v&&cell.v!=='—'){cell.s.font={bold:true,sz:9,color:{rgb:'7D5A00'}};cell.s.fill={fgColor:{rgb:'FFF8E7'}};}
+    });
+  }
+  XLSX.utils.book_append_sheet(wb,ws,`${nivel} (${items.length})`);
+  XLSX.writeFile(wb,`SARLAFT_${nivel}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function dl(nombre,cont){const b=new Blob([cont],{type:'text/plain;charset=utf-8'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=nombre;a.click();URL.revokeObjectURL(u)}
+
+function exportarTodos(){ exportarExcel(); }
+
+function exportAna(){
+  if(!curAnalysis) return;
+  const {row:r, analysis:a} = curAnalysis;
+  if(!a){alert('Sin análisis disponible.');return}
+  // Exportar análisis individual como Excel de 1 fila
+  const wb=XLSX.utils.book_new();
+  const crit=(a.senales_alerta||[]).filter(x=>!x.startsWith('ℹ️'));
+  const info=(a.senales_alerta||[]).filter(x=>x.startsWith('ℹ️')).map(x=>x.replace('ℹ️ ',''));
+  const cats=(a.categorias_especiales||[]);
+  const fecha=new Date().toLocaleString('es-CO',{dateStyle:'long',timeStyle:'short'});
+  const datos=[
+    ['ANÁLISIS SARLAFT INDIVIDUAL — COOPETRABAN'],
+    ['Generado',fecha],['Normativa','CBJ Título V Supersolidaria | Decreto 1674/2021 | Arts. 102-107 EOSF'],
+    [],
+    ['IDENTIFICACIÓN DEL ASOCIADO',''],
+    ['Identificación',r.id],['Tipo ID',r.tipoId||'CC'],['Nombre',r.nombre||'—'],
+    ['Agencia',r.agencia||'—'],['Estado',r.estado||'—'],
+    ['Actividad Laboral',r.actividad||'No registrada'],
+    ['Ingresos Declarados',r.ingresos||0],
+    [],
+    ['MOVIMIENTO DEL PERÍODO (HOJA 1)',''],
+    ['Consignado Efectivo',r.conEf||0],['Retirado Efectivo',r.retEf||0],
+    ['Total Efectivo',(r.conEf||0)+(r.retEf||0)],
+    ['Consignado Cheque',r.conCh||0],['Retirado Cheque',r.retCh||0],
+    ['Total Cheque',(r.conCh||0)+(r.retCh||0)],
+    ['Total Movimiento',(r.conEf||0)+(r.retEf||0)+(r.conCh||0)+(r.retCh||0)],
+    ['N° Transacciones',r.numTx||0],['Días con Movimiento',r.diasMov||0],
+    ['Mayor Operación Diaria (Ef.)',r.maxEfDia||0],
+    [],
+    ['RESULTADO DEL ANÁLISIS',''],
+    ['Nivel de Riesgo',a.nivel_riesgo||'—'],
+    ['Justificación',a.justificacion_riesgo||'—'],
+    [],
+    ['SEÑALES DE ALERTA CRÍTICAS ('+crit.length+')',''],
+    ...crit.map((c,i)=>[`C${i+1}`,c]),
+    ...(crit.length===0?[['—','Sin alertas críticas en el período']]: []),
+    [],
+    ['NOTAS INFORMATIVAS ('+info.length+')',''],
+    ...info.map((c,i)=>[`I${i+1}`,c]),
+    ...(info.length===0?[['—','Sin notas informativas']]: []),
+    [],
+    ...(cats.length>0?[
+      ['CATEGORÍAS ESPECIALES — VALIDACIÓN MANUAL REQUERIDA',''],
+      ...cats.map((c,i)=>[`CE${i+1}`,c]),
+      []
+    ]:[]),
+    ['ANÁLISIS DE PERFIL',''],
+    ...(a.analisis_perfil||[]).map((p,i)=>[`${i+1}`,p]),
+    [],
+    ['VARIACIONES HISTÓRICAS (HOJA 3)',''],
+    ['Detalle',a.variaciones_historicas||'Sin historial disponible'],
+    [],
+    ['JUSTIFICACIÓN TÉCNICA — OFICIAL DE CUMPLIMIENTO',''],
+    ['Texto completo',a.justificacion_tecnica||'—'],
+    [],
+    ['RECOMENDACIONES DE ACCIÓN',''],
+    ...(a.recomendaciones||[]).map((rec,i)=>[`${i+1}`,rec]),
+    [],
+    ['NORMATIVA APLICABLE',''],
+    ...(a.normativa_aplicable||[]).map(n=>['•',n]),
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(datos);
+  ws['!cols']=[{wch:42},{wch:90}];
+  ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:1}}];
+  const niv=a.nivel_riesgo||'Bajo';
+  const COL_NIV={Alto:'C0392B',Medio:'E67E22',Bajo:'1E8449'};
+  const BG_NIV={Alto:'FADBD8',Medio:'FDEBD0',Bajo:'D5F5E3'};
+  const HD_NIV={Alto:'E74C3C',Medio:'E67E22',Bajo:'27AE60'};
+  if(ws['A1']) ws['A1'].s={font:{bold:true,sz:13,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:HD_NIV[niv]}},alignment:{horizontal:'center'}};
+  // Secciones en verde oscuro
+  [4,13,22,25,28,32,36,40,43,46].forEach(ri=>{
+    const cell=ws[XLSX.utils.encode_cell({r:ri,c:0})];
+    if(cell&&String(cell.v).endsWith("'")) return;
+    if(cell) cell.s={font:{bold:true,sz:10,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'00532F'}}};
+  });
+  ws['!rows']=datos.map((_,i)=>({hpt:i===0?26:i>=22&&i<=35?45:16}));
+  XLSX.utils.book_append_sheet(wb,ws,r.nombre?r.nombre.substring(0,31):'Análisis');
+  XLSX.writeFile(wb,`SARLAFT_${r.id}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// ══════════ MOTOR SARLAFT ══════════
+// Basado en: Circular Básica Jurídica Título V - Supersolidaria
+// Arts. 102-107 EOSF | Decreto 1674/2021 | GAFI Rec. 8, 10, 19
+// Umbrales según CBJ: Tx individuales ≥$2M | Múltiples ≥$20M
+function callAI(row, hist) {
+
+  // ── Helpers ──
+  function norm2(s){return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim()}
+  function bkm(obj){const m={};Object.keys(obj).forEach(k=>{m[norm2(k)]=k});return m}
+  function gv(obj,km,...cands){
+    for(const c of cands){
+      const nc=norm2(c);const r=km[nc];
+      if(r!=null&&obj[r]!=null&&obj[r]!=='') return obj[r];
+      const ws=nc.split(' ').filter(w=>w.length>2);
+      if(ws.length>0){const p=Object.keys(obj).find(k=>ws.every(w=>norm2(k).includes(w)));if(p&&obj[p]!=null) return obj[p]}
+    }
+    return undefined;
+  }
+  function gn(obj,km,...c){const v=gv(obj,km,...c);if(v==null||v==='') return 0;if(typeof v==='number') return v;return parseFloat(String(v).replace(/[^\d.-]/g,''))||0}
+
+  // ── Historial (Hoja 3) ──
+  let histConEf=0,histRetEf=0,histConCh=0,histRetCh=0,histMeses=new Set();
+  hist.forEach(h=>{
+    const km=bkm(h);
+    histConEf+=gn(h,km,'Consignado Efectivo'); histRetEf+=gn(h,km,'Retirado Efectivo');
+    histConCh+=gn(h,km,'Consignado Cheque');  histRetCh+=gn(h,km,'Retirado Cheque');
+    const mes=gv(h,km,'Mes','mes');
+    if(mes!=null) histMeses.add(String(mes));
+  });
+  const histMesesCount = histMeses.size || 1;
+  const histPromEfMes  = (histConEf + histRetEf) / histMesesCount;
+  const histPromChMes  = (histConCh + histRetCh) / histMesesCount;
+
+  // ── Variables del período (Hoja 1) ──
+  const totalEf    = row.conEf + row.retEf;
+  const totalCh    = row.conCh + row.retCh;
+  const totalMov   = totalEf + totalCh;
+  const ingresos   = row.ingresos || 0;
+  const numTx      = row.numTx || 0;
+  const diasMov    = row.diasConMovimiento || row.diasMov || 0;
+  const maxEfDia   = row.maxEfDia || 0;
+  const actLaboral = (row.actividad||'').toLowerCase().trim();
+  const estadoRaw  = row.estado || row['Estado asociado'] || row['Estado asociado '] || '';
+  const estado     = estadoRaw.toLowerCase().trim();
+  const nombre     = row.nombre || row.Asociado || '(Sin nombre)';
+  const esInactivo = estado === 'inactivo' || estado.includes('inactivo');
+  const actividadLabel = (row.actividad||'').trim().length > 2 ? row.actividad.trim() : 'No registrada';
+
+  // Datos de actualización del perfil
+  const fechaActStr = row.fechaAct || row.fechaActualizacion || '';
+  const fechaActMs  = fechaActStr ? new Date(fechaActStr).getTime() : 0;
+  const hoy         = Date.now();
+  const diasSinActualizar = fechaActMs > 0 ? Math.floor((hoy - fechaActMs) / 86400000) : 9999;
+  const perfilDesactualizado = diasSinActualizar > 365; // más de 1 año sin actualizar
+
+  // ── CATEGORÍAS ESPECIALES — match exacto con los nuevos valores de Actividad Laboral ──
+  // Los 7 valores específicos que usa Coopetraban en Hoja 2:
+  // "Administra Recursos Públicos" | "PEP" | "Familiar PEP" | "ESAL" |
+  // "Inmobiliario" | "Juegos de suerte y azar" | "Minero"
+  const actNorm = actLaboral.trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+
+  const esPEP          = actNorm === 'pep' || actNorm === 'familiar pep' ||
+                         actNorm === 'administra recursos publicos';
+  const esFamiliarPEP  = actNorm === 'familiar pep';
+  const esAdmRecPub    = actNorm === 'administra recursos publicos';
+  const esMinero       = actNorm === 'minero';
+  const esInmobiliario = actNorm === 'inmobiliario';
+  const esJuegos       = actNorm === 'juegos de suerte y azar';
+  const esOng          = actNorm === 'esal';
+
+  // ════════════════════════════════════════════════════════
+  // SEÑALES DE ALERTA CRÍTICAS — Circular Básica Jurídica
+  // Supersolidaria Título V, numerales 3.2.2.4 y 3.2.2.5
+  // ════════════════════════════════════════════════════════
+  const alertasCriticas = [];
+
+  // ── C1. INACTIVO con cualquier movimiento (CBJ §3.2.2.3.1.2)
+  if (esInactivo && totalMov > 0)
+    alertasCriticas.push(`Asociado con estado INACTIVO registra movimiento de ${fmtFull(totalMov)}. Inconsistente con el vínculo (CBJ §3.2.2.3.1.2).`);
+
+  // ── C2. Transacción individual ≥ $5.000.000 en un día — umbral Coopetraban (CBJ §3.2.7.2.2.1)
+  if (maxEfDia >= 5000000)
+    alertasCriticas.push(`Operación individual en efectivo de ${fmtFull(maxEfDia)} en un solo día ≥ $5.000.000 (umbral reporte individual Coopetraban — CBJ §3.2.7.2.2.1).`);
+
+  // ── C3. Transacciones múltiples ≥ $30.000.000 acumuladas en el mes — umbral Coopetraban (CBJ §3.2.7.2.3.2)
+  if (totalEf >= 30000000)
+    alertasCriticas.push(`Efectivo acumulado del período ${fmtFull(totalEf)} ≥ $30.000.000 (umbral reporte múltiple Coopetraban — CBJ §3.2.7.2.3.2).`);
+
+  // ── C4. Incoherencia actividad económica vs montos (CBJ §3.2.2.4.1 — operaciones inusuales)
+  if (ingresos > 0 && totalEf > ingresos * 3 && totalEf > 5000000)
+    alertasCriticas.push(`Efectivo ${fmtFull(totalEf)} supera 300% de ingresos declarados (${fmtFull(ingresos)}). Ratio ${(totalEf/ingresos).toFixed(1)}x — no guarda relación con la actividad económica (CBJ §3.2.2.4.1).`);
+
+  // ── C5. Sin ingresos declarados + movimiento relevante (CBJ §3.2.2.3.1.2 — KYC incompleto)
+  if (ingresos === 0 && totalMov >= 5000000)
+    alertasCriticas.push(`Sin ingresos declarados en perfil (Hoja 2) con movimiento de ${fmtFull(totalMov)}. Perfil KYC incompleto — no es posible evaluar coherencia financiera (CBJ §3.2.2.3.1.2).`);
+
+  // ── C6. Incremento abrupto vs historial — operación inusual (CBJ §3.2.2.4.1)
+  if (histPromEfMes > 0 && totalEf > histPromEfMes * 5 && totalEf >= 5000000)
+    alertasCriticas.push(`Efectivo ${fmtFull(totalEf)} es ${(totalEf/histPromEfMes).toFixed(1)}x el promedio mensual histórico (${fmtFull(histPromEfMes)}). Operación inusual — fuera de parámetros de normalidad (CBJ §3.2.2.4.1).`);
+
+  // ── C7. Posible estructuración/fraccionamiento (CBJ §3.2.2.4.1)
+  if (numTx > 10 && totalEf >= 30000000 && maxEfDia > 0 && (totalEf/numTx) < 5000000)
+    alertasCriticas.push(`${numTx} transacciones con promedio ${fmtFull(totalEf/numTx)} suman ${fmtFull(totalEf)}. Patrón de posible fraccionamiento para evadir umbral de reporte (CBJ §3.2.2.4.1).`);
+
+  // ── C8. Retiros dominan el efectivo (CBJ §3.2.2.4.1 — drenaje de fondos)
+  if (row.retEf > 0 && (row.conEf+row.retEf) >= 5000000 && row.retEf/(row.conEf+row.retEf) > 0.85)
+    alertasCriticas.push(`${((row.retEf/(row.conEf+row.retEf))*100).toFixed(0)}% del efectivo son retiros (${fmtFull(row.retEf)}). Patrón de drenaje de fondos inusual (CBJ §3.2.2.4.1).`);
+
+  // ── C9. ESAL con movimiento relevante (GAFI Rec. 8 — CBJ §Antecedentes)
+  if (esOng && totalEf >= 5000000)
+    alertasCriticas.push(`Entidad Sin Ánimo de Lucro (ESAL) con efectivo ${fmtFull(totalEf)} ≥ $5.000.000. Requiere debida diligencia reforzada (GAFI Rec. 8 — CBJ Tít.V Antecedentes).`);
+
+  // ════════════════════════════════════════════════════════════════
+  // CATEGORÍAS ESPECIALES — Requieren validación manual del Oficial
+  // No generan nivel automáticamente; se documentan para revisión
+  // CBJ §3.2.2.2.1 (PEP) | §3.2.2.5.1 (señales de alerta sectorial)
+  // ════════════════════════════════════════════════════════════════
+  const categoriasEspeciales = [];
+
+  // CE1. PEP
+  if (actNorm === 'pep')
+    categoriasEspeciales.push(`🏛 PEP: Asociado clasificado como Persona Expuesta Políticamente. Requiere aprobación del Consejo de Administración para mantener o iniciar relación, debida diligencia intensificada y monitoreo continuo (CBJ §3.2.2.2.1 — Decreto 1674/2016).`);
+
+  // CE2. Familiar PEP
+  if (esFamiliarPEP)
+    categoriasEspeciales.push(`🏛 FAMILIAR PEP: Asociado es familiar de Persona Expuesta Políticamente. Aplica el mismo tratamiento especial que el PEP durante el período del cargo y los 2 años siguientes a su dejación (CBJ §3.2.2.2.1 — Decreto 830/2021).`);
+
+  // CE3. Administra Recursos Públicos
+  if (esAdmRecPub)
+    categoriasEspeciales.push(`🏦 ADMINISTRA RECURSOS PÚBLICOS: Asociado maneja fondos públicos. Requiere procedimiento de debida diligencia reforzada, monitoreo transaccional permanente y verificación en listas vinculantes (CBJ §3.2.2.2.1 — Arts. 102-107 EOSF).`);
+
+  // CE4. ESAL
+  if (esOng)
+    categoriasEspeciales.push(`✝ ESAL: Entidad Sin Ánimo de Lucro. Sector vulnerable al abuso para financiación del terrorismo según GAFI Recomendación 8. Verificar origen y destino de fondos, beneficiarios finales y propósito de las operaciones (CBJ Tít.V Antecedentes — GAFI Rec. 8).`);
+
+  // CE5. Inmobiliario
+  if (esInmobiliario)
+    categoriasEspeciales.push(`🏢 INMOBILIARIO: Sector identificado como vulnerable al lavado de activos por GAFI y GAFILAT. Verificar coherencia entre operaciones, origen de fondos y actividad específica de finca raíz (CBJ §3.2.2.4.1 — Tipologías GAFILAT).`);
+
+  // CE6. Juegos de suerte y azar
+  if (esJuegos)
+    categoriasEspeciales.push(`🎰 JUEGOS DE SUERTE Y AZAR: Sector de control especial regulado por la Ley 643/2001. Verificar cumplimiento normativa sectorial y aplicar monitoreo reforzado de transacciones en efectivo (Ley 643/2001 — CBJ §3.2.2.5.1).`);
+
+  // CE7. Minero
+  if (esMinero)
+    categoriasEspeciales.push(`⛏ MINERO: Sector de alto riesgo LA/FT en Colombia según tipologías GAFI-GAFILAT. Verificar licencias de explotación, origen de recursos y coherencia entre actividad minera declarada y volumen transaccional (CBJ §3.2.2.3.1.2 — Tipologías GAFILAT).`);
+
+  // ════════════════════════════════════════════════════════
+  // ALERTAS INFORMATIVAS — Se documentan, no definen nivel
+  // ════════════════════════════════════════════════════════
+  const alertasInfo = [];
+
+  // I1. Perfil desactualizado > 1 año (CBJ §3.2.2.3.1.2)
+  if (perfilDesactualizado && totalMov > 0)
+    alertasInfo.push(`Perfil con ${diasSinActualizar > 9000 ? 'fecha no registrada' : diasSinActualizar+' días sin actualizar'}. CBJ §3.2.2.3.1.2 exige actualización mínima anual.`);
+  else if (!fechaActStr && totalMov > 0)
+    alertasInfo.push('Fecha de última actualización no registrada. CBJ §3.2.2.3.1.2 exige actualización mínima anual.');
+
+  // I2. Sin actividad laboral (CBJ §3.2.2.3.1.2)
+  if (!actLaboral || actLaboral.length < 3)
+    alertasInfo.push('Actividad económica no registrada en perfil. Dato mínimo requerido para KYC (CBJ §3.2.2.3.1.2).');
+
+  // I3. Efectivo entre 100%-300% de ingresos
+  if (ingresos > 0 && totalEf > ingresos && totalEf <= ingresos * 3)
+    alertasInfo.push(`Efectivo (${fmtFull(totalEf)}) supera ingresos declarados (${fmtFull(ingresos)}): ${(totalEf/ingresos*100).toFixed(0)}%. Seguimiento recomendado (CBJ §3.2.2.5.2).`);
+
+  // I4. Incremento moderado vs historial (2x-5x)
+  if (histPromEfMes > 0 && totalEf > histPromEfMes * 2 && totalEf < histPromEfMes * 5)
+    alertasInfo.push(`Efectivo ${(totalEf/histPromEfMes).toFixed(1)}x el promedio mensual histórico (${fmtFull(histPromEfMes)}). Variación a monitorear (CBJ §3.2.2.5.3).`);
+
+  // I5. Sin movimiento
+  if (totalMov === 0)
+    alertasInfo.push('Sin transacciones en el período analizado.');
+
+  // I6. ESAL sin movimiento crítico
+  if (esOng && totalEf > 0 && totalEf < 5000000)
+    alertasInfo.push('ESAL con movimiento bajo umbral crítico. Verificar origen — diligencia ordinaria (GAFI Rec. 8).');
+
+  // ── PUNTAJE — solo alertas críticas definen el nivel ──
+  let puntaje = alertasCriticas.length * 2;
+  if (totalEf >= 100000000)        puntaje += 4;
+  else if (totalEf >= 50000000)    puntaje += 3;
+  else if (totalEf >= 30000000)    puntaje += 1;
+  if (esInactivo && totalMov > 0)  puntaje += 3;
+  if (maxEfDia >= 30000000)        puntaje += 2;
+  if (ingresos === 0 && totalMov >= 20000000) puntaje += 2;
+  // NOTA: las categorías especiales (CE1-CE4) NO suman puntaje ni definen nivel.
+  // Son ítems de validación manual del Oficial de Cumplimiento.
+
+  // ── CLASIFICACIÓN FINAL ──
+  let nivel_riesgo, justificacion_riesgo;
+  if (puntaje >= 6 || alertasCriticas.length >= 3 || (esInactivo && totalMov > 0)) {
+    nivel_riesgo = 'Alto';
+    justificacion_riesgo = `Puntaje: ${puntaje} pts | ${alertasCriticas.length} alerta(s) crítica(s). Requiere atención inmediata del Oficial de Cumplimiento y posible ROS ante la UIAF.`;
+  } else if (puntaje >= 2 || alertasCriticas.length >= 1) {
+    nivel_riesgo = 'Medio';
+    justificacion_riesgo = `Puntaje: ${puntaje} pts | ${alertasCriticas.length} alerta(s) crítica(s) y ${alertasInfo.length} informativa(s). Monitoreo reforzado y solicitud de información adicional.`;
+  } else {
+    nivel_riesgo = 'Bajo';
+    justificacion_riesgo = `Puntaje: ${puntaje} pts | Sin alertas críticas${alertasInfo.length > 0 ? ` (${alertasInfo.length} nota(s) informativa(s))` : ''}. Comportamiento transaccional coherente con el perfil del asociado.`;
+  }
+
+  const alertas = [...alertasCriticas, ...alertasInfo.map(a => `ℹ️ ${a}`)];
+
+  // ── ANÁLISIS DE PERFIL ──
+  const analisis_perfil = [];
+  analisis_perfil.push(
+    `Actividad económica: ${actividadLabel}. Estado del vínculo: ${row.estado||'N/R'}. ` +
+    (totalMov > 0
+      ? `Movimiento del período: ${fmtFull(totalMov)} (efectivo: ${fmtFull(totalEf)}, cheque: ${fmtFull(totalCh)}). ${numTx} transacciones en ${diasMov} día(s).`
+      : 'Sin movimiento transaccional en el período analizado.')
+  );
+  if (ingresos > 0 && totalMov > 0) {
+    const ratio = (totalMov/ingresos*100).toFixed(1);
+    analisis_perfil.push(
+      `Ingresos declarados (Hoja 2): ${fmtFull(ingresos)}. Movimiento del período = ${ratio}% de ingresos. ` +
+      (parseFloat(ratio) > 300 ? '⚠ Proporción MUY ELEVADA — inconsistencia significativa con el perfil financiero.' :
+       parseFloat(ratio) > 100 ? 'Proporción superior a ingresos declarados — requiere análisis de coherencia.' :
+       'Proporción dentro del rango esperado para el perfil del asociado.')
+    );
+  } else if (totalMov > 0) {
+    analisis_perfil.push(`Sin ingresos declarados en el perfil (Hoja 2). Movimiento de ${fmtFull(totalMov)} sin referencia financiera para evaluar coherencia (KYC incompleto — CBJ §3.2.2.3.1.2).`);
+  } else {
+    analisis_perfil.push('Sin movimiento transaccional. No aplica análisis de coherencia financiera para este período.');
+  }
+  if (totalMov > 0) {
+    const pctEf = (totalEf/totalMov*100).toFixed(1);
+    analisis_perfil.push(
+      `Composición del movimiento: ${pctEf}% efectivo (${fmtFull(totalEf)}) | ${(100-parseFloat(pctEf)).toFixed(1)}% cheque (${fmtFull(totalCh)}). ` +
+      (parseFloat(pctEf) > 80 ? 'Predominio muy alto de efectivo — mayor riesgo LA/FT según EBR.' :
+       parseFloat(pctEf) > 50 ? 'Predominio de efectivo. Evaluar coherencia con actividad económica.' : 'Composición equilibrada entre efectivo y cheque.')
+    );
+  }
+  if (numTx > 0)
+    analisis_perfil.push(`Frecuencia: ${numTx} transacciones en ${diasMov} día(s) activo(s) (${diasMov>0?(numTx/diasMov).toFixed(1):numTx} tx/día activo). Mayor operación individual en efectivo: ${fmtFull(maxEfDia)}.`);
+  if (esOng)
+    analisis_perfil.push(`Entidad sin ánimo de lucro: aplica diligencia reforzada conforme GAFI Recomendación 8 y CBJ Título V Antecedentes.`);
+  if (esPEP)
+    analisis_perfil.push(`Posible PEP identificado por actividad laboral. Aplica procedimiento especial CBJ §3.2.2.2.1 (Decreto 1674/2016): aprobación alta gerencia, monitoreo continuo e intensificado.`);
+
+  // ── VARIACIONES HISTÓRICAS ──
+  let variaciones_historicas;
+  if (hist.length === 0) {
+    variaciones_historicas = 'Sin registros disponibles en la Hoja 3 (historial 2025) para este asociado. No es posible comparar tendencias.';
+  } else {
+    const cambioEf = histPromEfMes > 0
+      ? `${totalEf > histPromEfMes ? '+' : ''}${((totalEf-histPromEfMes)/histPromEfMes*100).toFixed(1)}%`
+      : 'N/A';
+    variaciones_historicas =
+      `Hoja 3 — ${hist.length} registro(s) en ${histMesesCount} mes(es) del año 2025. ` +
+      `Efectivo acumulado histórico: ${fmtFull(histConEf+histRetEf)} | Promedio mensual: ${fmtFull(histPromEfMes)}. ` +
+      `Variación período actual vs promedio histórico: ${cambioEf}. ` +
+      (histPromEfMes > 0 && totalEf > histPromEfMes * 5 && totalEf >= 2000000
+        ? '⚠ Incremento superior a 5x el promedio histórico con monto relevante — operación inusual (CBJ §3.2.2.4.1).'
+        : histPromEfMes > 0 && totalEf > histPromEfMes * 2
+          ? 'Incremento moderado respecto al comportamiento histórico. Monitorear siguiente período.'
+          : 'Comportamiento del período consistente con el historial 2025.');
+  }
+
+  // ── JUSTIFICACIÓN TÉCNICA FORMAL ──
+  const nombre2 = nombre || row.id;
+  const justificacion_tecnica =
+    `Con fundamento en el análisis de las transacciones de la Hoja 1 (período abril 2026) y el perfil ` +
+    `de la Hoja 2, se concluye: ${nombre2} (${row.tipoId||'CC'} ${row.id}), agencia ${row.agencia||'N/R'}, ` +
+    `estado ${row.estado||'N/R'}, actividad: ${actividadLabel}, ingresos declarados: ${fmtFull(ingresos)}. ` +
+    `En el período registró ${numTx} transacciones en ${diasMov} día(s) por ${fmtFull(totalMov)} ` +
+    `(efectivo: ${fmtFull(totalEf)}, cheque: ${fmtFull(totalCh)}). ` +
+    (alertasCriticas.length > 0
+      ? `Se identificaron ${alertasCriticas.length} señal(es) de alerta crítica(s): ` +
+        alertasCriticas.map((a,i)=>`${i+1}) ${a}`).join(' ') +
+        ` Conforme al Enfoque Basado en Riesgo (EBR) del Decreto 1674/2021, ` +
+        `los numerales 3.2.2.4 y 3.2.2.5 de la Circular Básica Jurídica de Supersolidaria ` +
+        `y las Recomendaciones GAFI, se asigna nivel de riesgo ${nivel_riesgo.toUpperCase()}.`
+      : `No se identificaron señales de alerta críticas en el período analizado. ` +
+        `El comportamiento transaccional es coherente con el perfil del asociado. ` +
+        `Nivel de riesgo: ${nivel_riesgo.toUpperCase()} — SARLAFT Coopetraban.`);
+
+  // ── RECOMENDACIONES DE ACCIÓN ──
+  const recomendaciones = [];
+  if (nivel_riesgo === 'Alto') {
+    recomendaciones.push('Escalar de inmediato al Oficial de Cumplimiento para evaluación formal (CBJ §3.2.4.2.2).');
+    recomendaciones.push('Evaluar la procedencia de Reporte de Operación Sospechosa (ROS) ante la UIAF vía SIREL (CBJ §3.2.7.2.1).');
+    recomendaciones.push('Solicitar documentación soporte del origen de los fondos de las operaciones del período.');
+    if (esInactivo) recomendaciones.push('Investigar por qué un asociado INACTIVO registra movimientos. Verificar si corresponde reactivar el vínculo o reportar.');
+    if (esPEP) recomendaciones.push('Aplicar procedimiento PEP: aprobación Consejo de Administración, debida diligencia intensificada y monitoreo continuo (CBJ §3.2.2.2.1).');
+    recomendaciones.push('Verificar en listas vinculantes ONU/GAFI/OFAC previo a cualquier operación futura (CBJ §3.2.2.3.1).');
+    recomendaciones.push('Considerar restricción temporal de operaciones hasta obtener justificación satisfactoria.');
+  } else if (nivel_riesgo === 'Medio') {
+    recomendaciones.push('Implementar monitoreo reforzado de las transacciones del asociado en el siguiente período (CBJ §3.2.2.5.3).');
+    recomendaciones.push('Solicitar información y soportes adicionales que justifiquen el comportamiento transaccional.');
+    if (!actLaboral || actLaboral.length < 3)
+      recomendaciones.push('Actualizar actividad económica e ingresos en el perfil del asociado (KYC — CBJ §3.2.2.3.1.2).');
+    if (perfilDesactualizado || !fechaActStr)
+      recomendaciones.push('Actualizar el formulario de vinculación del asociado. La CBJ §3.2.2.3.1.2 exige actualización mínima anual.');
+    recomendaciones.push('Registrar en el expediente SARLAFT los hallazgos del presente análisis.');
+    recomendaciones.push('Programar entrevista de debida diligencia si los patrones persisten en el siguiente período.');
+  } else {
+    recomendaciones.push('Mantener monitoreo periódico estándar según el perfil de riesgo residual (CBJ §3.1.4).');
+    if (!actLaboral || actLaboral.length < 3)
+      recomendaciones.push('Actualizar actividad económica e ingresos del perfil en la próxima visita (CBJ §3.2.2.3.1.2).');
+    if (perfilDesactualizado || !fechaActStr)
+      recomendaciones.push('Gestionar actualización anual del formulario de vinculación (CBJ §3.2.2.3.1.2).');
+    recomendaciones.push('Conservar este análisis en el expediente del asociado para seguimiento semestral.');
+  }
+
+  // ── RESUMEN ──
+  const resumen =
+    `${nombre2} (${row.tipoId||'CC'} ${row.id}), agencia ${row.agencia||'N/R'}, ` +
+    `estado ${row.estado||'N/R'}, actividad: ${actividadLabel}. ` +
+    (totalMov > 0
+      ? `${numTx} transacciones por ${fmtFull(totalMov)} en el período (efectivo: ${fmtFull(totalEf)}, cheque: ${fmtFull(totalCh)}). `
+      : 'Sin movimiento en el período. ') +
+    (alertasCriticas.length > 0
+      ? `${alertasCriticas.length} señal(es) de alerta crítica(s) identificadas. Nivel de riesgo: ${nivel_riesgo.toUpperCase()}.`
+      : `Sin alertas críticas. Nivel de riesgo: ${nivel_riesgo.toUpperCase()}.`);
+
+  return {
+    resumen, analisis_perfil,
+    senales_alerta: alertas,
+    categorias_especiales: categoriasEspeciales,
+    nivel_riesgo, justificacion_riesgo, justificacion_tecnica,
+    variaciones_historicas, recomendaciones,
+    normativa_aplicable: [
+      'CBJ Tít.V Supersolidaria', 'Decreto 1674/2021', 'Arts. 102-107 EOSF',
+      'GAFI Recomendaciones 8 y 10', 'Ley 1121/2006', 'Circular Externa 32/2021',
+      'Circular Externa 38/2022', 'Decreto 830/2021 (PEP)'
+    ]
+  };
+}
+
+function extractRiskLevel(a){return a.nivel_riesgo||'Bajo'}
+</script>
+</body>
+</html>
