@@ -25,6 +25,20 @@ document.getElementById('cia-logout')
 window.guardarResultadoCIA = async function({ total, total_valor, por_vencer, vencidos }) {
   try {
     const sem = vencidos > 10 ? 'rojo' : vencidos > 0 ? 'amarillo' : 'verde';
+
+    // Calcular datos enriquecidos desde DATA
+    function cntBy(arr,k){const m={};arr.forEach(r=>{const raw=String(r[k]||'').trim();if(!raw||raw==='N/A'||raw==='undefined'||raw==='null')return;m[raw]=(m[raw]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]);}
+    function sumBy(arr,gk,vk){const m={};arr.forEach(r=>{const key=String(r[gk]||'N/A').trim();m[key]=(m[key]||0)+(parseFloat(String(r[vk]||'0').replace(/[^0-9.]/g,''))||0);});return Object.entries(m).sort((a,b)=>b[1]-a[1]);}
+    function normC(s){s=String(s||'').trim().toUpperCase();if(s.includes('TASA'))return'Mejor tasa';if(s.includes('CAPACIDAD')||s.includes('COLILLA'))return'Sin capacidad';if(s.includes('ENDEUDAMIENTO'))return'Alto endeudamiento';if(s.includes('RECURSO')||s.includes('PROPIO'))return'Recursos propios';if(s.includes('NEGAD'))return'Crédito negado';if(!s)return'Otro';return s.length>20?s.substring(0,20)+'…':s;}
+
+    const byBco = cntBy(DATA,'Banco').slice(0,5);
+    const byDst = cntBy(DATA,'Destino').slice(0,5);
+    const byAg  = sumBy(DATA,'Agencia','Valor').slice(0,6);
+    const causalMap = {};
+    DATA.forEach(r=>{const k=normC(r['Causal Compra']);causalMap[k]=(causalMap[k]||0)+1;});
+    const byCsl = Object.entries(causalMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    const byEnt = cntBy(DATA,'Entidad Compra').slice(0,6);
+
     await supabase.from('resultados_cia').insert({
       modulo:        'tesoreria',
       ejecutado_por: perfil.email,
@@ -35,10 +49,16 @@ window.guardarResultadoCIA = async function({ total, total_valor, por_vencer, ve
         por_vencer:    por_vencer,
         vencidos:      vencidos,
         semaforo:      sem,
+        // Datos enriquecidos para slides del gerente
+        por_banco:     byBco,
+        por_destino:   byDst,
+        por_agencia:   byAg,
+        por_causal:    byCsl,
+        por_entidad:   byEnt,
       },
       estado: 'completado'
     });
-    console.log('✅ Resultado guardado en CIA dashboard');
+    console.log('✅ Resultado enriquecido guardado en CIA dashboard');
   } catch(e) {
     console.warn('⚠ CIA save error:', e.message);
   }
@@ -645,7 +665,6 @@ async function buildPPTX(){
 
     // ── CIA: guardar resumen en Supabase (sin datos sensibles) ────────────
     if (typeof window.guardarResultadoCIA === 'function') {
-      // Calcular totales desde DATA
       let tv = 0, porVencer = 0, vencidos = 0;
       const hoy = new Date();
       DATA.forEach(r => {
