@@ -268,25 +268,145 @@ function renderCard(modulo, data) {
     </div>`;
 
   const r = ultimo.resumen || {};
-  // Stats según módulo
   const isTes = modulo === 'tesoreria' || modulo === 'abonos';
-  const statsHtml = isTes ? `
-    <div class="mc-stat">
-      <div class="mc-stat-num" style="color:var(--white)">${r.total_cheques || '—'}</div>
-      <div class="mc-stat-lbl">Total cheques</div>
-    </div>
-    <div class="mc-stat">
-      <div class="mc-stat-num" style="color:var(--teal)">$${r.total_valor ? Math.round(r.total_valor).toLocaleString('es-CO') : '—'}</div>
-      <div class="mc-stat-lbl">Valor total</div>
-    </div>
-    <div class="mc-stat">
-      <div class="mc-stat-num" style="color:var(--amber)">${r.por_vencer || '0'}</div>
-      <div class="mc-stat-lbl">Por vencer</div>
-    </div>
-    <div class="mc-stat">
-      <div class="mc-stat-num" style="color:var(--red)">${r.vencidos || '0'}</div>
-      <div class="mc-stat-lbl">Vencidos</div>
-    </div>` : `
+
+  // ── SLIDER for tesoreria / abonos ─────────────────────────────────────
+  if (isTes) {
+    const sid = 'slider-' + modulo;
+    const slides = [];
+
+    // Slide 1 — KPIs portada
+    slides.push(`
+      <div class="slide">
+        <div class="slide-title">📊 Resumen Ejecutivo — Cheques en Canje</div>
+        <div class="slide-kpis">
+          <div class="sk"><div class="sk-num">${r.total_cheques || 0}</div><div class="sk-lbl">Total cheques</div></div>
+          <div class="sk"><div class="sk-num" style="color:var(--teal)">$${r.total_valor ? Math.round(r.total_valor).toLocaleString('es-CO') : 0}</div><div class="sk-lbl">Valor total COP</div></div>
+          <div class="sk"><div class="sk-num" style="color:var(--amber)">${r.por_vencer || 0}</div><div class="sk-lbl">Por vencer (5 días)</div></div>
+          <div class="sk"><div class="sk-num" style="color:${r.vencidos > 0 ? 'var(--red)' : 'var(--green)'}">${r.vencidos || 0}</div><div class="sk-lbl">Vencidos</div></div>
+        </div>
+        <div class="slide-footer">👤 ${ultimo.ejecutado_por} &nbsp;·&nbsp; 🕐 ${new Date(ultimo.fecha).toLocaleString('es-CO')}</div>
+      </div>`);
+
+    // Slide 2 — Por entidad
+    if (r.por_entidad && r.por_entidad.length) {
+      const total_e = r.por_entidad.reduce((a,b) => a + b[1], 0);
+      slides.push(`
+        <div class="slide">
+          <div class="slide-title">🏦 Distribución por Entidad que Compra</div>
+          <div class="slide-bars">
+            ${r.por_entidad.slice(0,6).map(([name, cnt]) => `
+              <div class="sbar-row">
+                <div class="sbar-label">${name.length > 22 ? name.substring(0,22)+'…' : name}</div>
+                <div class="sbar-track"><div class="sbar-fill" style="width:${Math.round(cnt/total_e*100)}%;background:var(--green)"></div></div>
+                <div class="sbar-val">${cnt} (${Math.round(cnt/total_e*100)}%)</div>
+              </div>`).join('')}
+          </div>
+        </div>`);
+    }
+
+    // Slide 3 — Por banco
+    if (r.por_banco && r.por_banco.length) {
+      const total_b = r.por_banco.reduce((a,b) => a + b[1], 0);
+      slides.push(`
+        <div class="slide">
+          <div class="slide-title">🏛 Distribución por Banco</div>
+          <div class="slide-bars">
+            ${r.por_banco.slice(0,5).map(([name, cnt], i) => {
+              const colors = ['var(--green)','var(--teal)','var(--blue)','var(--amber)','var(--purple)'];
+              return `
+              <div class="sbar-row">
+                <div class="sbar-label">${name.length > 22 ? name.substring(0,22)+'…' : name}</div>
+                <div class="sbar-track"><div class="sbar-fill" style="width:${Math.round(cnt/total_b*100)}%;background:${colors[i]}"></div></div>
+                <div class="sbar-val">${cnt} (${Math.round(cnt/total_b*100)}%)</div>
+              </div>`;}).join('')}
+          </div>
+        </div>`);
+    }
+
+    // Slide 4 — Top agencias por valor
+    if (r.por_agencia && r.por_agencia.length) {
+      const maxAg = r.por_agencia[0][1] || 1;
+      slides.push(`
+        <div class="slide">
+          <div class="slide-title">📍 Top Agencias por Valor</div>
+          <div class="slide-bars">
+            ${r.por_agencia.slice(0,6).map(([name, val]) => `
+              <div class="sbar-row">
+                <div class="sbar-label">${name.replace(/^\d+-\s*/,'').substring(0,22)}</div>
+                <div class="sbar-track"><div class="sbar-fill" style="width:${Math.round(val/maxAg*100)}%;background:var(--teal)"></div></div>
+                <div class="sbar-val">$${Math.round(val/1000000)}M</div>
+              </div>`).join('')}
+          </div>
+        </div>`);
+    }
+
+    // Slide 5 — Por causal
+    if (r.por_causal && r.por_causal.length) {
+      const total_c = r.por_causal.reduce((a,b) => a + b[1], 0);
+      slides.push(`
+        <div class="slide">
+          <div class="slide-title">📋 Causales de Canje</div>
+          <div class="slide-bars">
+            ${r.por_causal.slice(0,6).map(([name, cnt], i) => {
+              const colors = ['var(--amber)','var(--blue)','var(--teal)','var(--green)','var(--purple)','var(--red)'];
+              return `
+              <div class="sbar-row">
+                <div class="sbar-label">${name}</div>
+                <div class="sbar-track"><div class="sbar-fill" style="width:${Math.round(cnt/total_c*100)}%;background:${colors[i]}"></div></div>
+                <div class="sbar-val">${cnt} (${Math.round(cnt/total_c*100)}%)</div>
+              </div>`;}).join('')}
+          </div>
+        </div>`);
+    }
+
+    // Slide 6 — Por destino
+    if (r.por_destino && r.por_destino.length) {
+      const total_d = r.por_destino.reduce((a,b) => a + b[1], 0);
+      slides.push(`
+        <div class="slide">
+          <div class="slide-title">🎯 Distribución por Destino</div>
+          <div class="slide-bars">
+            ${r.por_destino.slice(0,5).map(([name, cnt], i) => {
+              const colors = ['var(--blue)','var(--green)','var(--amber)','var(--teal)','var(--purple)'];
+              return `
+              <div class="sbar-row">
+                <div class="sbar-label">${name.length > 22 ? name.substring(0,22)+'…' : name}</div>
+                <div class="sbar-track"><div class="sbar-fill" style="width:${Math.round(cnt/total_d*100)}%;background:${colors[i]}"></div></div>
+                <div class="sbar-val">${cnt} (${Math.round(cnt/total_d*100)}%)</div>
+              </div>`;}).join('')}
+          </div>
+        </div>`);
+    }
+
+    return `
+    <div class="modulo-card">
+      <div class="mc-header">
+        <div class="mc-title">
+          <span class="mc-icon">${info.icon}</span>
+          <div><div class="mc-name">${info.nombre}</div>
+          <div class="mc-area">${info.area} · ${data.length} ejecución(es) · ${slides.length} slides</div></div>
+        </div>
+        <div class="semaforo">
+          <div class="sem-dot" style="background:${sem.color}"></div>
+          <span class="sem-label" style="color:${sem.color}">${sem.label}</span>
+        </div>
+      </div>
+      <div class="slider-wrap" id="${sid}">
+        <div class="slider-track" id="${sid}-track">
+          ${slides.join('')}
+        </div>
+        <div class="slider-nav">
+          <button class="snav-btn" onclick="slideNav('${sid}',-1)">&#8592;</button>
+          <span class="slide-counter" id="${sid}-counter">1 / ${slides.length}</span>
+          <button class="snav-btn" onclick="slideNav('${sid}',1)">&#8594;</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ── DEFAULT card for other modules ────────────────────────────────────
+  const statsHtml = `
     <div class="mc-stat">
       <div class="mc-stat-num" style="color:var(--white)">${r.total_clientes || r.total || '—'}</div>
       <div class="mc-stat-lbl">Total procesados</div>
@@ -318,9 +438,7 @@ function renderCard(modulo, data) {
         </div>
       </div>
       <div class="mc-body">
-        <div class="mc-stats">
-          ${statsHtml}
-        </div>
+        <div class="mc-stats">${statsHtml}</div>
         <div class="mc-meta">
           <span>👤 ${ultimo.ejecutado_por}</span>
           <span>🕐 ${new Date(ultimo.fecha).toLocaleString('es-CO')}</span>
@@ -340,11 +458,32 @@ function renderTodos(data) {
 }
 
 function renderModulo(m, data) {
-  document.getElementById('s-'+m).innerHTML =
-    `<div class="modulo-grid">${renderCard(m, data)}</div>`;
+  const el = document.getElementById('s-'+m);
+  if (el) el.innerHTML = `<div class="modulo-grid">${renderCard(m, data)}</div>`;
 }
 
 // TABS
+// ── SLIDER NAVIGATION ────────────────────────────────────────────────────
+const sliderState = {};
+function slideNav(sid, dir) {
+  const track = document.getElementById(sid + '-track');
+  if (!track) return;
+  const slides = track.querySelectorAll('.slide');
+  if (!slides.length) return;
+  if (!sliderState[sid]) sliderState[sid] = 0;
+  slides[sliderState[sid]].classList.remove('active');
+  sliderState[sid] = (sliderState[sid] + dir + slides.length) % slides.length;
+  slides[sliderState[sid]].classList.add('active');
+  const counter = document.getElementById(sid + '-counter');
+  if (counter) counter.textContent = (sliderState[sid]+1) + ' / ' + slides.length;
+}
+function initSliders() {
+  document.querySelectorAll('.slider-track').forEach(track => {
+    const slides = track.querySelectorAll('.slide');
+    if (slides.length) slides[0].classList.add('active');
+  });
+}
+
 window.switchTab = (id) => {
   document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
