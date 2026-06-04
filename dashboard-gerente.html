@@ -204,7 +204,7 @@ async function cargarDatos() {
   renderKPIs(data);
 
   // Render por módulo
-  const modulos = ['sarlaft','tasas','pila','cad','asesorias'];
+  const modulos = ['sarlaft','tasas','pila','cad','asesorias','tesoreria','abonos'];
   modulos.forEach(m => {
     const filtrado = data.filter(r => r.modulo === m);
     renderModulo(m, filtrado);
@@ -333,7 +333,7 @@ function renderCard(modulo, data) {
 }
 
 function renderTodos(data) {
-  const modulos = ['sarlaft','tasas','pila','cad','asesorias'];
+  const modulos = ['sarlaft','tasas','pila','cad','asesorias','tesoreria','abonos'];
   const html = modulos.map(m => renderCard(m, data.filter(r=>r.modulo===m))).join('');
   document.getElementById('s-todos').innerHTML =
     `<div class="modulo-grid">${html}</div>`;
