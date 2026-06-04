@@ -163,6 +163,8 @@ main{max-width:1100px;margin:0 auto;padding:2rem 2rem 4rem;position:relative;z-i
     <button class="tab" onclick="switchTab('pila')">👥 Seg. Social</button>
     <button class="tab" onclick="switchTab('cad')">📄 CAD</button>
     <button class="tab" onclick="switchTab('asesorias')">💬 Asesorías</button>
+    <button class="tab" onclick="switchTab('tesoreria')">🏦 Tesorería</button>
+    <button class="tab" onclick="switchTab('abonos')">💰 Abonos</button>
   </div>
 
   <div class="sec active" id="s-todos">
@@ -173,6 +175,8 @@ main{max-width:1100px;margin:0 auto;padding:2rem 2rem 4rem;position:relative;z-i
   <div class="sec" id="s-pila"></div>
   <div class="sec" id="s-cad"></div>
   <div class="sec" id="s-asesorias"></div>
+  <div class="sec" id="s-tesoreria"></div>
+  <div class="sec" id="s-abonos"></div>
 
 </main>
 
@@ -221,11 +225,13 @@ function renderKPIs(data) {
 }
 
 const MODULOS_INFO = {
-  sarlaft:   { icon:'🛡', nombre:'SARLAFT',           area:'Riesgos' },
-  tasas:     { icon:'📊', nombre:'Informe de Tasas',   area:'Finanzas' },
-  pila:      { icon:'👥', nombre:'Seguridad Social',   area:'Gestión Humana' },
-  cad:       { icon:'📄', nombre:'CAD Comprobantes',   area:'Desarrollo' },
-  asesorias: { icon:'💬', nombre:'Asesorías Virtuales',area:'Crédito' },
+  sarlaft:   { icon:'🛡', nombre:'SARLAFT',              area:'Riesgos' },
+  tasas:     { icon:'📊', nombre:'Informe de Tasas',      area:'Finanzas' },
+  pila:      { icon:'👥', nombre:'Seguridad Social',      area:'Gestión Humana' },
+  cad:       { icon:'📄', nombre:'CAD Comprobantes',      area:'Desarrollo' },
+  asesorias: { icon:'💬', nombre:'Asesorías Virtuales',   area:'Crédito' },
+  tesoreria: { icon:'🏦', nombre:'Cheques en Canje',      area:'Tesorería' },
+  abonos:    { icon:'💰', nombre:'Abonos — Canje Cheques',area:'Abonos' },
 };
 
 function semaforo(data) {
@@ -262,6 +268,42 @@ function renderCard(modulo, data) {
     </div>`;
 
   const r = ultimo.resumen || {};
+  // Stats según módulo
+  const isTes = modulo === 'tesoreria' || modulo === 'abonos';
+  const statsHtml = isTes ? `
+    <div class="mc-stat">
+      <div class="mc-stat-num" style="color:var(--white)">${r.total_cheques || '—'}</div>
+      <div class="mc-stat-lbl">Total cheques</div>
+    </div>
+    <div class="mc-stat">
+      <div class="mc-stat-num" style="color:var(--teal)">$${r.total_valor ? Math.round(r.total_valor).toLocaleString('es-CO') : '—'}</div>
+      <div class="mc-stat-lbl">Valor total</div>
+    </div>
+    <div class="mc-stat">
+      <div class="mc-stat-num" style="color:var(--amber)">${r.por_vencer || '0'}</div>
+      <div class="mc-stat-lbl">Por vencer</div>
+    </div>
+    <div class="mc-stat">
+      <div class="mc-stat-num" style="color:var(--red)">${r.vencidos || '0'}</div>
+      <div class="mc-stat-lbl">Vencidos</div>
+    </div>` : `
+    <div class="mc-stat">
+      <div class="mc-stat-num" style="color:var(--white)">${r.total_clientes || r.total || '—'}</div>
+      <div class="mc-stat-lbl">Total procesados</div>
+    </div>
+    <div class="mc-stat">
+      <div class="mc-stat-num" style="color:var(--red)">${r.alertas_alta || '0'}</div>
+      <div class="mc-stat-lbl">Alertas altas</div>
+    </div>
+    <div class="mc-stat">
+      <div class="mc-stat-num" style="color:var(--amber)">${r.alertas_media || '0'}</div>
+      <div class="mc-stat-lbl">Alertas medias</div>
+    </div>
+    <div class="mc-stat">
+      <div class="mc-stat-num" style="color:var(--green)">${r.alertas_baja || '0'}</div>
+      <div class="mc-stat-lbl">Alertas bajas</div>
+    </div>`;
+
   return `
     <div class="modulo-card">
       <div class="mc-header">
@@ -277,22 +319,7 @@ function renderCard(modulo, data) {
       </div>
       <div class="mc-body">
         <div class="mc-stats">
-          <div class="mc-stat">
-            <div class="mc-stat-num" style="color:var(--white)">${r.total_clientes || r.total || '—'}</div>
-            <div class="mc-stat-lbl">Total procesados</div>
-          </div>
-          <div class="mc-stat">
-            <div class="mc-stat-num" style="color:var(--red)">${r.alertas_alta || '0'}</div>
-            <div class="mc-stat-lbl">Alertas altas</div>
-          </div>
-          <div class="mc-stat">
-            <div class="mc-stat-num" style="color:var(--amber)">${r.alertas_media || '0'}</div>
-            <div class="mc-stat-lbl">Alertas medias</div>
-          </div>
-          <div class="mc-stat">
-            <div class="mc-stat-num" style="color:var(--green)">${r.alertas_baja || '0'}</div>
-            <div class="mc-stat-lbl">Alertas bajas</div>
-          </div>
+          ${statsHtml}
         </div>
         <div class="mc-meta">
           <span>👤 ${ultimo.ejecutado_por}</span>
