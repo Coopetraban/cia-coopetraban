@@ -154,6 +154,7 @@ main{max-width:1100px;margin:0 auto;padding:2rem 2rem 4rem;position:relative;z-i
     <button class="tab" onclick="switchTab(this,'asesorias')">💬 Asesorías</button>
     <button class="tab" onclick="switchTab(this,'tesoreria')">🏦 Tesorería</button>
     <button class="tab" onclick="switchTab(this,'abonos')">💰 Abonos</button>
+    <button class="tab" onclick="switchTab(this,'logistica')">🚚 Logística</button>
   </div>
   <div class="sec active" id="s-todos"><div class="loading"><div class="spin">⟳</div><br>Cargando resultados...</div></div>
   <div class="sec" id="s-sarlaft"></div>
@@ -163,6 +164,7 @@ main{max-width:1100px;margin:0 auto;padding:2rem 2rem 4rem;position:relative;z-i
   <div class="sec" id="s-asesorias"></div>
   <div class="sec" id="s-tesoreria"></div>
   <div class="sec" id="s-abonos"></div>
+  <div class="sec" id="s-logistica"></div>
 </main>
 
 <script type="module">
@@ -175,7 +177,7 @@ const { data: perfil } = await supabase.from('profiles').select('*').eq('id', se
 document.getElementById('user-badge').textContent = '👤 ' + perfil.nombre + ' · ' + perfil.rol;
 window.cerrarSesion = () => logout('./index.html');
 
-const MODULOS = ['sarlaft','tasas','pila','cad','asesorias','tesoreria','abonos'];
+const MODULOS = ['sarlaft','tasas','pila','cad','asesorias','tesoreria','abonos','logistica'];
 const INFO = {
   sarlaft:   { icon:'🛡', nombre:'SARLAFT',              area:'Riesgos' },
   tasas:     { icon:'📊', nombre:'Informe de Tasas',      area:'Finanzas' },
@@ -184,6 +186,7 @@ const INFO = {
   asesorias: { icon:'💬', nombre:'Asesorías Virtuales',   area:'Crédito' },
   tesoreria: { icon:'🏦', nombre:'Cheques en Canje',      area:'Tesorería' },
   abonos:    { icon:'💰', nombre:'Abonos — Canje Cheques',area:'Abonos' },
+  logistica: { icon:'🚚', nombre:'Bitácora de Novedades',  area:'Logística' },
 };
 
 const sliderState = {};
@@ -291,6 +294,59 @@ function buildSlider(modulo, ultimo) {
   </div>`;
 }
 
+function buildSliderLogistica(ultimo) {
+  const r = ultimo.resumen || {};
+  const sid = 'sl-logistica';
+  const slides = [];
+  const colors = ['var(--green)','var(--teal)','var(--blue)','var(--amber)','var(--purple)','var(--red)'];
+
+  // Slide 1 — KPIs
+  slides.push(`<div class="slide" data-sid="${sid}" data-idx="0">
+    <div class="slide-title">📊 Resumen Ejecutivo — Bitácora de Novedades</div>
+    <div class="slide-kpis">
+      <div class="sk"><div class="sk-num">${r.total||0}</div><div class="sk-lbl">Novedades</div></div>
+      <div class="sk"><div class="sk-num" style="color:var(--amber)">${r.abiertas||0}</div><div class="sk-lbl">Abiertas / proceso</div></div>
+      <div class="sk"><div class="sk-num" style="color:var(--green)">${r.cerradas||0}</div><div class="sk-lbl">Cerradas</div></div>
+      <div class="sk"><div class="sk-num" style="color:var(--teal)">${r.tasa_resolucion||0}%</div><div class="sk-lbl">Tasa resolución</div></div>
+    </div>
+    <div class="slide-footer">👤 ${ultimo.ejecutado_por} &nbsp;·&nbsp; 🕐 ${new Date(ultimo.fecha).toLocaleString('es-CO')} &nbsp;·&nbsp; ⏱ ${r.horas_prom||0} h prom.</div>
+  </div>`);
+
+  let idx = 1;
+  const barsSlide = (title, arr, n) => {
+    if (!arr?.length) return;
+    const tot = arr.reduce((a,b)=>a+b[1],0);
+    slides.push(`<div class="slide" data-sid="${sid}" data-idx="${idx}">
+      <div class="slide-title">${title}</div>
+      <div class="slide-bars">${arr.slice(0,n).map(([nm,v],i)=>bar(nm,v,tot,colors[i%colors.length])).join('')}</div>
+    </div>`);
+    idx++;
+  };
+  barsSlide('🚦 Por estado', r.por_estado, 4);
+  barsSlide('⚠️ Por prioridad', r.por_prioridad, 4);
+  barsSlide('🖥 Equipos / bienes más reportados', r.por_equipo, 6);
+  barsSlide('🏢 Por dependencia', r.por_dependencia, 6);
+
+  if (slides.length === 1) {
+    slides.push(`<div class="slide" data-sid="${sid}" data-idx="1">
+      <div class="slide-title">ℹ️ Datos básicos</div>
+      <div style="padding:1rem;color:var(--gray);font-size:.85rem">
+        Carga un reporte de novedades para ver el análisis por estado, prioridad, equipos y dependencia.
+      </div>
+    </div>`);
+  }
+
+  sliderState[sid] = 0;
+  return `<div class="slider-wrap">
+    <div class="slider-track" id="${sid}-track">${slides.join('')}</div>
+    <div class="slider-nav">
+      <button class="snav-btn" onclick="slideNav('${sid}',-1)">&#8592;</button>
+      <span class="slide-counter" id="${sid}-counter">1 / ${slides.length}</span>
+      <button class="snav-btn" onclick="slideNav('${sid}',1)">&#8594;</button>
+    </div>
+  </div>`;
+}
+
 function renderCard(mod, data) {
   const info = INFO[mod] || { icon:'📦', nombre:mod, area:'' };
   const sem  = semaforo(data);
@@ -312,6 +368,13 @@ function renderCard(mod, data) {
   if (!ul) return `<div class="modulo-card">${header}
     <div class="empty"><div class="empty-icon">📭</div><p>Sin ejecuciones registradas.</p></div>
   </div>`;
+
+  if (mod === 'logistica') {
+    return `<div class="modulo-card">${header}${buildSliderLogistica(ul)}
+      <div style="text-align:center;padding:.2rem 0 1.2rem">
+        <a href="modulos/logistica.html" style="display:inline-block;padding:8px 18px;border:1px solid var(--green);border-radius:10px;color:var(--green);font-family:'Syne',sans-serif;font-weight:700;font-size:.8rem;text-decoration:none">🔎 Ver bitácora completa</a>
+      </div></div>`;
+  }
 
   if (isTes) {
     return `<div class="modulo-card">${header}${buildSlider(mod, ul)}</div>`;
