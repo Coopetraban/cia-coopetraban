@@ -187,6 +187,8 @@ async function redirigir(userId) {
 
   if (p.rol === 'gerente' || p.rol === 'admin') {
     location.href = 'dashboard-gerente.html';
+  } else if (p.rol === 'corresponsal') {
+    location.href = 'modulos/logistica.html';
   } else {
     location.href = 'modulos/' + p.area + '.html';
   }
