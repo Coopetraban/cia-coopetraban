@@ -187,15 +187,34 @@ import { supabase } from '../supabase-client.js';
 import { requireAuth, logout } from '../auth-guard.js';
 
 // Verificar sesión y rol (logística entra como rol 'usuario' con area='logistica')
-const perfil = await requireAuth(['usuario','gerente','admin'], '../index.html');
+const perfil = await requireAuth(['usuario','gerente','admin','corresponsal'], '../index.html');
+window.ciaPerfil = perfil;
 
 const tag = document.getElementById('cia-user-tag');
 if (tag) tag.textContent = '👤 ' + (perfil.nombre || perfil.email);
 const out = document.getElementById('cia-logout');
 if (out) out.addEventListener('click', () => logout('../index.html'));
 
-// ── Modo GERENCIA/ADMIN (solo lectura): trae el último reporte desde Supabase y lo pinta ──
-// (cargador = rol 'usuario'; cualquier otro rol entra como visor de solo lectura)
+// ── Funciones de comentarios para corresponsales ──
+window.cargarComentariosCIA = async function(ticket) {
+  const { data, error } = await supabase
+    .from('comentarios_novedades')
+    .select('*')
+    .eq('ticket', ticket)
+    .order('created_at', { ascending: true });
+  return error ? [] : (data || []);
+};
+window.guardarComentarioCIA = async function(ticket, comentario) {
+  const { error } = await supabase.from('comentarios_novedades').insert({
+    ticket,
+    comentario,
+    autor_nombre: perfil.nombre || perfil.email,
+    autor_email: perfil.email
+  });
+  return error;
+};
+
+// ── Modo GERENCIA/ADMIN/CORRESPONSAL (solo lectura): trae el último reporte desde Supabase ──
 if (perfil.rol !== 'usuario') {
   const vol = document.getElementById('cia-volver'); if (vol) vol.hidden = false;
   const rel = document.getElementById('reloadBtn');  if (rel) rel.hidden = true;
@@ -425,10 +444,11 @@ function renderBars(elId, map, opts={}){
 
 /* ---- Filters ---- */
 function renderFilters(){
+  const esCorresponsal = window.ciaPerfil && window.ciaPerfil.rol === 'corresponsal';
   const groups = [
     {key:'estado', lab:'Estado', vals:['Todas','Abierta','En proceso','Cerrada']},
     {key:'prioridad', lab:'Prioridad', vals:['Todas','ALTO','MEDIO','BAJO']},
-    {key:'dependencia', lab:'Dependencia', vals:['Todas','Oficina','Corresponsales']},
+    ...(esCorresponsal ? [] : [{key:'dependencia', lab:'Dependencia', vals:['Todas','Oficina','Corresponsales']}]),
   ];
   const html = groups.map(g=>
     `<span class="grp-lab">${g.lab}</span>` +
@@ -442,11 +462,13 @@ function renderFilters(){
 
 /* ---- Rows ---- */
 function filtered(){
+  const esCorresponsal = window.ciaPerfil && window.ciaPerfil.rol === 'corresponsal';
+  const depFilter = esCorresponsal ? 'Corresponsales' : state.dependencia;
   const q=state.q.toLowerCase();
   return DATA.filter(d=>
     (state.estado==='Todas'||d.estado===state.estado)&&
     (state.prioridad==='Todas'||d.prioridad===state.prioridad)&&
-    (state.dependencia==='Todas'||d.dependencia===state.dependencia)&&
+    (depFilter==='Todas'||d.dependencia===depFilter)&&
     (!q || [d.ticket,d.oficina,d.equipo,d.responsable,d.usuario].join(' ').toLowerCase().includes(q))
   ).sort((a,b)=>{
     const e={'Abierta':0,'En proceso':1,'Cerrada':2};
@@ -502,11 +524,59 @@ function openDrawer(tk){
       </div>
       <div class="sec"><div class="lab">Descripción de la novedad</div><p>${d.descripcion||'—'}</p></div>
       <div class="sec"><div class="lab">Gestión realizada</div><p>${d.gestion||'—'}</p></div>
+      <div class="sec" id="sec-comentarios">
+        <div class="lab">Comentarios</div>
+        <div id="cmt-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+          <span style="color:var(--muted);font-size:12px">Cargando comentarios…</span>
+        </div>
+        <textarea id="cmt-input" rows="3" placeholder="Escribe un comentario o actualización de estado…"
+          style="width:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;color:var(--ink);
+          font-family:var(--sans);font-size:13px;padding:10px;resize:vertical;outline:none;box-sizing:border-box"></textarea>
+        <button id="cmt-send" style="margin-top:8px;font-family:var(--sans);font-size:12.5px;font-weight:500;padding:8px 18px;
+          border-radius:9px;border:1px solid var(--pine);background:var(--pine-soft);color:var(--pine);cursor:pointer">
+          Enviar comentario
+        </button>
+        <span id="cmt-status" style="font-family:var(--mono);font-size:11px;margin-left:10px;color:var(--muted)"></span>
+      </div>
     </div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawer').setAttribute('aria-hidden','false');
   document.getElementById('scrim').classList.add('open');
   document.getElementById('closeBtn').onclick = closeDrawer;
+
+  // Cargar y renderizar comentarios
+  function fmtDate(iso){ const d=new Date(iso); return d.toLocaleDateString('es-CO')+' '+d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}); }
+  function renderComments(list){
+    const el=document.getElementById('cmt-list'); if(!el) return;
+    if(!list.length){ el.innerHTML='<span style="color:var(--muted);font-size:12px;font-style:italic">Sin comentarios aún.</span>'; return; }
+    el.innerHTML = list.map(c=>`
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 13px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-family:var(--mono);font-size:11px;color:var(--pine);font-weight:600">${c.autor_nombre||c.autor_email}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">${fmtDate(c.created_at)}</span>
+        </div>
+        <p style="margin:0;font-size:13px;color:#c7d3dd;white-space:pre-line">${c.comentario}</p>
+      </div>`).join('');
+  }
+  if(window.cargarComentariosCIA){
+    window.cargarComentariosCIA(tk).then(list => renderComments(list));
+  }
+  const sendBtn = document.getElementById('cmt-send');
+  if(sendBtn && window.guardarComentarioCIA){
+    sendBtn.onclick = async () => {
+      const input = document.getElementById('cmt-input');
+      const status = document.getElementById('cmt-status');
+      const texto = input ? input.value.trim() : '';
+      if(!texto){ if(status) status.textContent='Escribe algo antes de enviar.'; return; }
+      sendBtn.disabled=true; if(status) status.textContent='Enviando…';
+      const err = await window.guardarComentarioCIA(tk, texto);
+      if(err){ if(status){ status.textContent='Error: '+(err.message||err); status.style.color='var(--clay)'; } sendBtn.disabled=false; return; }
+      if(input) input.value='';
+      if(status){ status.textContent='✓ Comentario enviado'; status.style.color='var(--pine)'; setTimeout(()=>{ if(status) status.textContent=''; },3000); }
+      sendBtn.disabled=false;
+      window.cargarComentariosCIA(tk).then(list => renderComments(list));
+    };
+  }
 }
 function closeDrawer(){
   document.getElementById('drawer').classList.remove('open');
@@ -597,7 +667,8 @@ function renderAll(){
 window.ciaMostrarNovedades = function(rows){
   DATA = Array.isArray(rows) ? rows : [];
   if(!DATA.length) return false;
-  Object.assign(state,{estado:'Todas',prioridad:'Todas',dependencia:'Todas',q:''});
+  const esCorresponsal = window.ciaPerfil && window.ciaPerfil.rol === 'corresponsal';
+  Object.assign(state,{estado:'Todas',prioridad:'Todas',dependencia: esCorresponsal ? 'Corresponsales' : 'Todas',q:''});
   const qi=document.getElementById('q'); if(qi) qi.value='';
   renderAll();
   document.getElementById('loader').hidden=true;
