@@ -213,6 +213,13 @@ window.guardarComentarioCIA = async function(ticket, comentario) {
   });
   return error;
 };
+window.cambiarEstadoCIA = async function(ticket, nuevoEstado) {
+  const { error } = await supabase
+    .from('novedades_logistica')
+    .update({ estado: nuevoEstado })
+    .eq('ticket', ticket);
+  return error;
+};
 
 // ── Modo GERENCIA/ADMIN/CORRESPONSAL (solo lectura): trae el último reporte desde Supabase ──
 if (perfil.rol !== 'usuario') {
@@ -525,6 +532,15 @@ function openDrawer(tk){
       <div class="sec"><div class="lab">Descripción de la novedad</div><p>${d.descripcion||'—'}</p></div>
       <div class="sec"><div class="lab">Gestión realizada</div><p>${d.gestion||'—'}</p></div>
       <div class="sec" id="sec-comentarios">
+        ${(window.ciaPerfil && window.ciaPerfil.rol === 'corresponsal' && d.estado !== 'Cerrada') ? `
+        <div style="margin-bottom:14px;padding:12px 14px;background:rgba(255,171,64,.07);border:1px solid rgba(255,171,64,.25);border-radius:10px">
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ochre);margin-bottom:8px">Cambiar estado</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${d.estado !== 'En proceso' ? `<button id="btn-en-proceso" style="font-family:var(--sans);font-size:12px;font-weight:500;padding:7px 14px;border-radius:8px;border:1px solid var(--ochre);background:rgba(255,171,64,.1);color:var(--ochre);cursor:pointer">⏳ Marcar En proceso</button>` : ''}
+            <button id="btn-cerrar" style="font-family:var(--sans);font-size:12px;font-weight:500;padding:7px 14px;border-radius:8px;border:1px solid var(--clay);background:rgba(255,82,82,.1);color:var(--clay);cursor:pointer">✓ Marcar como Cerrada</button>
+          </div>
+          <span id="estado-status" style="font-family:var(--mono);font-size:11px;margin-top:6px;display:block;color:var(--muted)"></span>
+        </div>` : ''}
         <div class="lab">Comentarios</div>
         <div id="cmt-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
           <span style="color:var(--muted);font-size:12px">Cargando comentarios…</span>
@@ -561,6 +577,32 @@ function openDrawer(tk){
   if(window.cargarComentariosCIA){
     window.cargarComentariosCIA(tk).then(list => renderComments(list));
   }
+
+  // Botones de cambio de estado (solo corresponsal)
+  async function aplicarCambioEstado(nuevoEstado, btn) {
+    const estStatus = document.getElementById('estado-status');
+    btn.disabled = true;
+    if(estStatus) estStatus.textContent = 'Actualizando…';
+    const err = await window.cambiarEstadoCIA(tk, nuevoEstado);
+    if(err){
+      if(estStatus){ estStatus.textContent = 'Error: '+(err.message||err); estStatus.style.color='var(--clay)'; }
+      btn.disabled = false; return;
+    }
+    // Actualizar DATA local para reflejar el cambio
+    const idx = DATA.findIndex(x=>x.ticket===tk);
+    if(idx !== -1) DATA[idx].estado = nuevoEstado;
+    // Guardar automáticamente un comentario con el cambio
+    if(window.guardarComentarioCIA){
+      await window.guardarComentarioCIA(tk, `Estado cambiado a: ${nuevoEstado}`);
+    }
+    if(estStatus){ estStatus.textContent = `✓ Novedad marcada como "${nuevoEstado}"`; estStatus.style.color='var(--pine)'; }
+    setTimeout(()=>{ openDrawer(tk); }, 1200);
+  }
+  const btnEnProceso = document.getElementById('btn-en-proceso');
+  if(btnEnProceso) btnEnProceso.onclick = () => aplicarCambioEstado('En proceso', btnEnProceso);
+  const btnCerrar = document.getElementById('btn-cerrar');
+  if(btnCerrar) btnCerrar.onclick = () => aplicarCambioEstado('Cerrada', btnCerrar);
+
   const sendBtn = document.getElementById('cmt-send');
   if(sendBtn && window.guardarComentarioCIA){
     sendBtn.onclick = async () => {
